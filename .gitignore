@@ -1,0 +1,6 @@
+bin/
+obj/
+artifacts/
+*.nupkg
+*.snupkg
+External/NativeStatic/.work/

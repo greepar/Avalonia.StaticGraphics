@@ -1,0 +1,197 @@
+name: nuget-static-graphics
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_to_nuget:
+        description: Publish package to nuget.org
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "static-graphics-v*"
+
+env:
+  SKIASHARP_VERSION: "3.119.2"
+  ANGLE_BRANCH: "7151"
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            target_cpu: x64
+            runner: ubuntu-latest
+          - rid: linux-arm64
+            target_cpu: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm ninja-build pkg-config libfontconfig1-dev
+
+      - name: Build Linux static graphics libraries
+        env:
+          RID: ${{ matrix.rid }}
+          TARGET_CPU: ${{ matrix.target_cpu }}
+          LLVM_AR: llvm-ar
+        run: scripts/build-linux-static-graphics.sh all
+
+      - name: Upload Linux static archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-static-${{ matrix.rid }}
+          path: External/NativeStatic/${{ matrix.rid }}/*
+          if-no-files-found: error
+
+  build-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            target_cpu: x64
+            msvc_arch: x64
+          - rid: win-arm64
+            target_cpu: arm64
+            msvc_arch: amd64_arm64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Install native build dependencies
+        shell: pwsh
+        run: choco install ninja llvm -y
+
+      - name: Build Windows static graphics libraries
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          TARGET_CPU: ${{ matrix.target_cpu }}
+        run: .\scripts\build-windows-static-graphics.ps1 all
+
+      - name: Upload Windows static archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-static-${{ matrix.rid }}
+          path: External/NativeStatic/${{ matrix.rid }}/*
+          if-no-files-found: error
+
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            target_cpu: x64
+          - rid: osx-arm64
+            target_cpu: arm64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: brew install ninja
+
+      - name: Build macOS static graphics libraries
+        env:
+          RID: ${{ matrix.rid }}
+          TARGET_CPU: ${{ matrix.target_cpu }}
+        run: scripts/build-macos-static-graphics.sh all
+
+      - name: Upload macOS static archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-static-${{ matrix.rid }}
+          path: External/NativeStatic/${{ matrix.rid }}/*
+          if-no-files-found: error
+
+  pack:
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux
+      - build-windows
+      - build-macos
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download static archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-static-*
+          path: External/NativeStatic
+          merge-multiple: false
+
+      - name: Move static archives into RID directories
+        run: |
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+            mkdir -p "External/NativeStatic/$rid"
+            mv "External/NativeStatic/native-static-$rid"/* "External/NativeStatic/$rid/"
+            rmdir "External/NativeStatic/native-static-$rid"
+          done
+
+      - name: Verify static archives
+        run: |
+          for rid in linux-x64 linux-arm64 osx-x64 osx-arm64; do
+            test -f External/NativeStatic/$rid/libskia.a
+            test -f External/NativeStatic/$rid/libSkiaSharp.a
+            test -f External/NativeStatic/$rid/libHarfBuzzSharp.a
+            test -f External/NativeStatic/$rid/libANGLE_static.a
+            test -f External/NativeStatic/$rid/libGLESv2_static.a
+          done
+
+          for rid in win-x64 win-arm64; do
+            test -f External/NativeStatic/$rid/skia.lib
+            test -f External/NativeStatic/$rid/SkiaSharp.lib
+            test -f External/NativeStatic/$rid/libHarfBuzzSharp.lib
+            test -f External/NativeStatic/$rid/libANGLE_static.lib
+            test -f External/NativeStatic/$rid/libGLESv2_static.lib
+          done
+
+      - name: Pack NuGet package
+        run: dotnet pack NuGet/LinuxStaticGraphics/Greepar.Avalonia.StaticGraphics.csproj -c Release -o artifacts/nuget
+
+      - name: Upload NuGet artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-static-graphics
+          path: |
+            artifacts/nuget/*.nupkg
+            artifacts/nuget/*.snupkg
+          if-no-files-found: error
+
+      - name: Publish to nuget.org
+        if: ${{ startsWith(github.ref, 'refs/tags/static-graphics-v') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_nuget == true) }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "NUGET_API_KEY secret is not configured. Skipping publish."
+            exit 0
+          fi
+
+          for package in artifacts/nuget/*.nupkg; do
+            dotnet nuget push "$package" \
+              --source "https://api.nuget.org/v3/index.json" \
+              --api-key "$NUGET_API_KEY" \
+              --skip-duplicate
+          done

@@ -1,0 +1,92 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <_GreeparAvaloniaStaticGraphicsRid Condition="'$(RuntimeIdentifier)' == 'win-x64'">win-x64</_GreeparAvaloniaStaticGraphicsRid>
+        <_GreeparAvaloniaStaticGraphicsRid Condition="'$(RuntimeIdentifier)' == 'win-arm64'">win-arm64</_GreeparAvaloniaStaticGraphicsRid>
+        <_GreeparAvaloniaStaticGraphicsRid Condition="'$(RuntimeIdentifier)' == 'linux-x64'">linux-x64</_GreeparAvaloniaStaticGraphicsRid>
+        <_GreeparAvaloniaStaticGraphicsRid Condition="'$(RuntimeIdentifier)' == 'linux-arm64'">linux-arm64</_GreeparAvaloniaStaticGraphicsRid>
+        <_GreeparAvaloniaStaticGraphicsRid Condition="'$(RuntimeIdentifier)' == 'osx-x64'">osx-x64</_GreeparAvaloniaStaticGraphicsRid>
+        <_GreeparAvaloniaStaticGraphicsRid Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">osx-arm64</_GreeparAvaloniaStaticGraphicsRid>
+        <_GreeparAvaloniaStaticGraphicsNativeRoot Condition="'$(_GreeparAvaloniaStaticGraphicsRid)' != ''">$(GreeparAvaloniaStaticGraphicsRoot)$(_GreeparAvaloniaStaticGraphicsRid)/native</_GreeparAvaloniaStaticGraphicsNativeRoot>
+        <LinkerFlavor Condition="'$(LinkerFlavor)' == '' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64')">lld</LinkerFlavor>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-arm64') and '$(_GreeparAvaloniaStaticGraphicsNativeRoot)' != ''">
+        <DirectPInvoke Include="libHarfBuzzSharp" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.lib')" />
+        <DirectPInvoke Include="libSkiaSharp" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/SkiaSharp.lib')" />
+        <DirectPInvoke Include="libGLESv2" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libGLESv2_static.lib')" />
+        <DirectPInvoke Include="av_libglesv2" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libGLESv2_static.lib')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.lib" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.lib')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/skia.lib" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/skia.lib')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/SkiaSharp.lib" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/SkiaSharp.lib')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libANGLE_static.lib" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libANGLE_static.lib')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libGLESv2_static.lib" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libGLESv2_static.lib')" />
+        <LinkerArg Include="d3d9.lib;dxguid.lib" />
+        <LinkerArg Include="dxgi.lib" />
+        <LinkerArg Include="Gdi32.lib;User32.lib" />
+        <LinkerArg Include="synchronization.lib" />
+        <LinkerArg Include="fontsub.lib;Ole32.lib;USP10.lib" />
+        <LinkerArg Include="d3d12.lib;d3dcompiler.lib" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64') and '$(_GreeparAvaloniaStaticGraphicsNativeRoot)' != ''">
+        <DirectPInvoke Include="libHarfBuzzSharp" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.a')" />
+        <DirectPInvoke Include="libSkiaSharp" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libSkiaSharp.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libskia.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libskia.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libSkiaSharp.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libSkiaSharp.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libANGLE_static.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libANGLE_static.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libGLESv2_static.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libGLESv2_static.a')" />
+        <NativeSystemLibrary Include="stdc++" />
+        <NativeSystemLibrary Include="gcc_eh" />
+        <NativeSystemLibrary Include="fontconfig" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64') and '$(_GreeparAvaloniaStaticGraphicsNativeRoot)' != '' and '$(LinkerFlavor)' == 'lld'">
+        <LinkerArg Include="-Wl,-z,nostart-stop-gc" />
+        <LinkerArg Include="-Wl,--allow-multiple-definition" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libskia.a')" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'osx-x64' or '$(RuntimeIdentifier)' == 'osx-arm64') and '$(_GreeparAvaloniaStaticGraphicsNativeRoot)' != ''">
+        <DirectPInvoke Include="libHarfBuzzSharp" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.a')" />
+        <DirectPInvoke Include="libSkiaSharp" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libSkiaSharp.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libHarfBuzzSharp.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libskia.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libskia.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libSkiaSharp.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libSkiaSharp.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libANGLE_static.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libANGLE_static.a')" />
+        <NativeLibrary Include="$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libGLESv2_static.a" Condition="Exists('$(_GreeparAvaloniaStaticGraphicsNativeRoot)/libGLESv2_static.a')" />
+        <LinkerArg Include="-framework CoreFoundation" />
+        <LinkerArg Include="-framework CoreGraphics" />
+        <LinkerArg Include="-framework CoreText" />
+        <LinkerArg Include="-framework Foundation" />
+        <LinkerArg Include="-framework IOSurface" />
+        <LinkerArg Include="-framework Metal" />
+        <LinkerArg Include="-framework QuartzCore" />
+    </ItemGroup>
+
+    <Target Name="GreeparAvaloniaStaticGraphicsDisableStaticExecutableOnApple"
+            BeforeTargets="LinkNative"
+            Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'osx-x64' or '$(RuntimeIdentifier)' == 'osx-arm64')">
+        <PropertyGroup>
+            <StaticExecutable>false</StaticExecutable>
+        </PropertyGroup>
+        <ItemGroup>
+            <LinkerArg Remove="-static" />
+            <LinkerArg Remove="-static-pie" />
+        </ItemGroup>
+    </Target>
+
+    <Target Name="GreeparAvaloniaStaticGraphicsCleanDynamicAssets"
+            AfterTargets="Publish"
+            Condition="'$(PublishAot)' == 'true' and '$(_GreeparAvaloniaStaticGraphicsNativeRoot)' != ''">
+        <ItemGroup>
+            <_GreeparAvaloniaStaticGraphicsFilesToDelete Include="$(PublishDir)av_libglesv2.dll" />
+            <_GreeparAvaloniaStaticGraphicsFilesToDelete Include="$(PublishDir)libHarfBuzzSharp.dll" />
+            <_GreeparAvaloniaStaticGraphicsFilesToDelete Include="$(PublishDir)libSkiaSharp.dll" />
+            <_GreeparAvaloniaStaticGraphicsFilesToDelete Include="$(PublishDir)libHarfBuzzSharp.so" />
+            <_GreeparAvaloniaStaticGraphicsFilesToDelete Include="$(PublishDir)libSkiaSharp.so" />
+            <_GreeparAvaloniaStaticGraphicsFilesToDelete Include="$(PublishDir)libHarfBuzzSharp.dylib" />
+            <_GreeparAvaloniaStaticGraphicsFilesToDelete Include="$(PublishDir)libSkiaSharp.dylib" />
+        </ItemGroup>
+        <Delete Files="@(_GreeparAvaloniaStaticGraphicsFilesToDelete)" TreatErrorsAsWarnings="true" />
+    </Target>
+</Project>
