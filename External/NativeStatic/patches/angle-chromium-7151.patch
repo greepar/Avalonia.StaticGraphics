@@ -2,10 +2,10 @@ diff --git a/BUILD.gn b/BUILD.gn
 index 07e1268a57..25f7cba544 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
-@@ -1472,7 +1472,18 @@ if (angle_has_frame_capture) {
+@@ -1573,7 +1573,18 @@ if (angle_has_frame_capture) {
    }
  }
- 
+
 +angle_static_library("libANGLE_static") {
 +  complete_static_lib = true
 +  public_deps = [ ":libANGLE" ]

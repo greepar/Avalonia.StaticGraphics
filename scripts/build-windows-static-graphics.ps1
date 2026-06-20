@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("skia", "angle", "all")]
+    [ValidateSet("skia", "angle", "angle-preflight", "all")]
     [string]$Target = "all"
 )
 
@@ -186,11 +186,44 @@ function Apply-AnglePatches($Src) {
     $patch = Join-Path $AnglePatchDir "angle-chromium-$AngleBranch.patch"
     if ((Test-Path $patch) -and -not (Select-String -Path (Join-Path $Src "BUILD.gn") -Pattern 'angle_static_library\("libANGLE_static"\)' -Quiet)) {
         $null = git -C $Src apply $patch
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to apply ANGLE patch: $patch"
+        }
     }
+}
+
+function Assert-AngleVisualStudioVersion {
+    if ($env:VisualStudioVersion -and -not ($env:VisualStudioVersion -in @("17.0", "16.0", "15.0"))) {
+        throw "ANGLE $AngleBranch requires Visual Studio 2022/2019/2017, but VisualStudioVersion is $env:VisualStudioVersion. Use windows-2022 or a VS 2022 developer prompt."
+    }
+    if ($env:GYP_MSVS_OVERRIDE_PATH -and ($env:GYP_MSVS_OVERRIDE_PATH -match '\\Microsoft Visual Studio\\18\\')) {
+        throw "ANGLE $AngleBranch requires Visual Studio 2022/2019/2017, but GYP_MSVS_OVERRIDE_PATH points to $env:GYP_MSVS_OVERRIDE_PATH. Use windows-2022 or a VS 2022 developer prompt."
+    }
+}
+
+function Test-AnglePatch {
+    Require-Command git
+    Assert-AngleVisualStudioVersion
+
+    $src = Sync-Angle
+    $patch = Join-Path $AnglePatchDir "angle-chromium-$AngleBranch.patch"
+    if (-not (Test-Path $patch)) {
+        return
+    }
+    if (Select-String -Path (Join-Path $src "BUILD.gn") -Pattern 'angle_static_library\("libANGLE_static"\)' -Quiet) {
+        return
+    }
+
+    $null = git -C $src apply --check $patch
+    if ($LASTEXITCODE -ne 0) {
+        throw "ANGLE patch does not apply: $patch"
+    }
+    Write-Host "ANGLE preflight passed."
 }
 
 function Build-Angle {
     Ensure-Tools
+    Assert-AngleVisualStudioVersion
     Ensure-DepotTools
     $src = Sync-Angle
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -229,6 +262,7 @@ New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 switch ($Target) {
     "skia" { Build-Skia }
+    "angle-preflight" { Test-AnglePatch }
     "angle" { Build-Angle }
     "all" { Build-Skia; Build-Angle }
 }
