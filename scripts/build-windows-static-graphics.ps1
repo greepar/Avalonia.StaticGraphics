@@ -25,6 +25,7 @@ function Ensure-Tools {
     Require-Command git
     Require-Command python
     Require-Command ninja
+    git config --global core.longpaths true
 }
 
 function Ensure-DepotTools {
@@ -51,7 +52,7 @@ function Copy-FirstExisting($Destination, [string[]]$Candidates) {
 function Sync-SkiaSharp {
     $src = Join-Path $WorkDir "SkiaSharp-$SkiaSharpVersion"
     if (-not (Test-Path (Join-Path $src ".git"))) {
-        git clone --depth 1 --branch "release/$SkiaSharpVersion" https://github.com/mono/SkiaSharp.git $src
+        git -c core.longpaths=true clone --depth 1 --branch "release/$SkiaSharpVersion" https://github.com/mono/SkiaSharp.git $src
     } else {
         git -C $src fetch --depth 1 origin "release/$SkiaSharpVersion"
         git -C $src checkout -q FETCH_HEAD
@@ -116,7 +117,7 @@ extra_cflags_cc = [ "/GR" ]
 function Sync-Angle {
     $src = Join-Path $WorkDir "ANGLE-$AngleBranch"
     if (-not (Test-Path (Join-Path $src ".git"))) {
-        git clone --depth 1 --branch "chromium/$AngleBranch" https://github.com/google/angle.git $src
+        git -c core.longpaths=true clone --depth 1 --branch "chromium/$AngleBranch" https://github.com/google/angle.git $src
     } else {
         git -C $src fetch --depth 1 origin "chromium/$AngleBranch"
         git -C $src checkout -q FETCH_HEAD

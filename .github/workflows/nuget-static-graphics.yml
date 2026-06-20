@@ -73,7 +73,9 @@ jobs:
 
       - name: Install native build dependencies
         shell: pwsh
-        run: choco install ninja llvm -y
+        run: |
+          git config --global core.longpaths true
+          choco install ninja llvm -y
 
       - name: Build Windows static graphics libraries
         shell: pwsh
