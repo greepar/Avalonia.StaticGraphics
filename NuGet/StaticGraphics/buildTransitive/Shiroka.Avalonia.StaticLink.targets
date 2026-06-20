@@ -56,6 +56,7 @@
         <NativeLibrary Include="$(_ShirokaAvaloniaStaticLinkNativeRoot)/libSkiaSharp.a" Condition="Exists('$(_ShirokaAvaloniaStaticLinkNativeRoot)/libSkiaSharp.a')" />
         <NativeLibrary Include="$(_ShirokaAvaloniaStaticLinkNativeRoot)/libANGLE_static.a" Condition="Exists('$(_ShirokaAvaloniaStaticLinkNativeRoot)/libANGLE_static.a')" />
         <NativeLibrary Include="$(_ShirokaAvaloniaStaticLinkNativeRoot)/libGLESv2_static.a" Condition="Exists('$(_ShirokaAvaloniaStaticLinkNativeRoot)/libGLESv2_static.a')" />
+        <NativeSystemLibrary Include="c++" />
         <LinkerArg Include="-framework CoreFoundation" />
         <LinkerArg Include="-framework CoreGraphics" />
         <LinkerArg Include="-framework CoreText" />
