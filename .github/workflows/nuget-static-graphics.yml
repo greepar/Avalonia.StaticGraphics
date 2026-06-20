@@ -238,7 +238,7 @@ jobs:
           - rid: linux-arm64
             runner: ubuntu-24.04-arm
           - rid: osx-x64
-            runner: macos-13
+            runner: macos-14
           - rid: osx-arm64
             runner: macos-latest
     runs-on: ${{ matrix.runner }}
