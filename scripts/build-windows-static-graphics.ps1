@@ -112,7 +112,14 @@ extra_cflags_cc = [ "/GR" ]
 
     Copy-FirstExisting (Join-Path $OutputDir "skia.lib") @((Join-Path $outDir "skia.lib"), (Join-Path $outDir "obj\skia.lib"))
     Copy-FirstExisting (Join-Path $OutputDir "SkiaSharp.lib") @((Join-Path $outDir "SkiaSharp.lib"), (Join-Path $outDir "obj\SkiaSharp.lib"))
-    Copy-FirstExisting (Join-Path $OutputDir "libHarfBuzzSharp.lib") @((Join-Path $outDir "libHarfBuzzSharp.lib"), (Join-Path $outDir "obj\libHarfBuzzSharp.lib"))
+    Copy-FirstExisting (Join-Path $OutputDir "libHarfBuzzSharp.lib") @(
+        (Join-Path $outDir "libHarfBuzzSharp.lib"),
+        (Join-Path $outDir "HarfBuzzSharp.lib"),
+        (Join-Path $outDir "obj\libHarfBuzzSharp.lib"),
+        (Join-Path $outDir "obj\HarfBuzzSharp.lib"),
+        (Join-Path $outDir "obj\HarfBuzzSharp\libHarfBuzzSharp.lib"),
+        (Join-Path $outDir "obj\HarfBuzzSharp\HarfBuzzSharp.lib")
+    )
 }
 
 function Sync-Angle {

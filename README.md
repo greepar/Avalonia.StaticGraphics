@@ -104,7 +104,7 @@ Build scripts:
 Build locally after the static archives exist:
 
 ```bash
-dotnet pack NuGet/LinuxStaticGraphics/Greepar.Avalonia.StaticGraphics.csproj -c Release -o artifacts/nuget
+dotnet pack NuGet/StaticGraphics/Greepar.Avalonia.StaticGraphics.csproj -c Release -o artifacts/nuget
 ```
 
 The package will be written to:

@@ -35,7 +35,7 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld llvm ninja-build pkg-config libfontconfig1-dev
+          sudo apt-get install -y clang lld llvm ninja-build pkg-config libfontconfig1-dev libglib2.0-dev
 
       - name: Build Linux static graphics libraries
         env:
@@ -170,7 +170,7 @@ jobs:
           done
 
       - name: Pack NuGet package
-        run: dotnet pack NuGet/LinuxStaticGraphics/Greepar.Avalonia.StaticGraphics.csproj -c Release -o artifacts/nuget
+        run: dotnet pack NuGet/StaticGraphics/Greepar.Avalonia.StaticGraphics.csproj -c Release -o artifacts/nuget
 
       - name: Upload NuGet artifact
         uses: actions/upload-artifact@v4
