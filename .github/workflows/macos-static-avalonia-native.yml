@@ -1,0 +1,199 @@
+name: macOS static AvaloniaNative experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_to_release:
+        description: Publish experimental artifacts to GitHub Release
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            runner: macos-14
+            target_cpu: x64
+          - rid: osx-arm64
+            runner: macos-latest
+            target_cpu: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      RID: ${{ matrix.rid }}
+      TARGET_CPU: ${{ matrix.target_cpu }}
+      WORK_DIR: ${{ github.workspace }}/External/NativeStatic/.work
+      OUTPUT_DIR: ${{ github.workspace }}/External/NativeStatic/${{ matrix.rid }}/native
+      AVALONIA_VERSION: 11.3.14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build macOS static graphics libraries
+        run: bash ./scripts/build-macos-static-graphics.sh all
+
+      - name: Build static AvaloniaNative
+        run: bash ./scripts/build-macos-avalonia-native-static.sh
+
+      - name: List native outputs
+        run: find "External/NativeStatic/${{ matrix.rid }}/native" -maxdepth 1 -type f -print
+
+      - name: Upload macOS native libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-static-native-${{ matrix.rid }}
+          path: External/NativeStatic/${{ matrix.rid }}/native/*
+          if-no-files-found: error
+
+  pack-experimental:
+    runs-on: ubuntu-latest
+    needs: build-macos-native
+    outputs:
+      package_version: ${{ steps.version.outputs.package_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS native libraries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: macos-static-native-*
+          path: artifacts/native
+
+      - name: Stage native libraries
+        run: |
+          mkdir -p External/NativeStatic/osx-x64/native External/NativeStatic/osx-arm64/native
+          cp artifacts/native/macos-static-native-osx-x64/* External/NativeStatic/osx-x64/native/
+          cp artifacts/native/macos-static-native-osx-arm64/* External/NativeStatic/osx-arm64/native/
+          find External/NativeStatic/osx-x64/native External/NativeStatic/osx-arm64/native -maxdepth 1 -type f -print
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Compute experimental package version
+        id: version
+        run: |
+          version="3.119.2-7151.8-macavn.${GITHUB_RUN_NUMBER}"
+          echo "package_version=$version" >> "$GITHUB_OUTPUT"
+          echo "$version"
+
+      - name: Pack experimental NuGet package
+        run: |
+          dotnet pack NuGet/StaticGraphics/Shiroka.Avalonia.StaticLink.csproj \
+            -c Release \
+            -o artifacts/nuget \
+            /p:PackageVersion=${{ steps.version.outputs.package_version }} \
+            /p:Version=${{ steps.version.outputs.package_version }}
+
+      - name: Upload experimental NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-static-avalonia-native-nuget
+          path: artifacts/nuget/*.nupkg
+          if-no-files-found: error
+
+  smoke-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            runner: macos-14
+          - rid: osx-arm64
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    needs: pack-experimental
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download experimental NuGet package
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-static-avalonia-native-nuget
+          path: artifacts/nuget
+
+      - name: Publish Avalonia smoke app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $projectDir = Join-Path $PWD "artifacts/avalonia-smoke-src"
+          pwsh ./scripts/create-avalonia-smoke.ps1 `
+            -ProjectDir $projectDir `
+            -NuGetSource (Resolve-Path "artifacts/nuget") `
+            -StaticLinkVersion "${{ needs.pack-experimental.outputs.package_version }}"
+          dotnet publish (Join-Path $projectDir "AvaloniaStaticLinkSmoke.csproj") `
+            -c Release `
+            -r "${{ matrix.rid }}" `
+            --configfile (Join-Path $projectDir "NuGet.config") `
+            /p:PublishAot=true `
+            /p:SelfContained=true `
+            /p:PublishSingleFile=true `
+            /p:StripSymbols=true `
+            /p:PublishDir="$PWD/artifacts/smoke-${{ matrix.rid }}/"
+
+      - name: Verify static macOS output
+        shell: pwsh
+        run: |
+          $publishDir = "artifacts/smoke-${{ matrix.rid }}"
+          $blocked = Get-ChildItem -Path $publishDir -Recurse -File | Where-Object {
+            $_.Name -in @("libAvaloniaNative.dylib", "libHarfBuzzSharp.dylib", "libSkiaSharp.dylib")
+          }
+          if ($blocked) {
+            $blocked | ForEach-Object { Write-Error "Unexpected dynamic library: $($_.FullName)" }
+            exit 1
+          }
+          Get-ChildItem -Path $publishDir -Recurse -File | ForEach-Object { $_.FullName }
+
+      - name: Upload macOS smoke app
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-static-avalonia-native-smoke-${{ matrix.rid }}
+          path: artifacts/smoke-${{ matrix.rid }}/**
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - pack-experimental
+      - smoke-macos
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_to_release == true }}
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          find release-artifacts/macos-static-avalonia-native-nuget -type f -name '*.nupkg' -exec cp {} release-files/ \;
+          for dir in release-artifacts/macos-static-avalonia-native-smoke-*; do
+            [ -d "$dir" ] || continue
+            name="$(basename "$dir")"
+            (cd "$dir" && zip -r "../../release-files/$name.zip" .)
+          done
+          ls -la release-files
+
+      - name: Publish experimental GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_tag="macos-static-avalonia-native-${GITHUB_RUN_NUMBER}"
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" release-files/* --clobber
+          else
+            gh release create "$release_tag" release-files/* \
+              --title "macOS static AvaloniaNative ${GITHUB_RUN_NUMBER}" \
+              --notes "Experimental macOS NativeAOT package with SkiaSharp, HarfBuzzSharp, and AvaloniaNative statically linked."
+          fi
