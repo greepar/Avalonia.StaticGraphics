@@ -179,7 +179,7 @@ jobs:
           done
 
       - name: Pack NuGet package
-        run: dotnet pack NuGet/StaticGraphics/Greepar.Avalonia.StaticGraphics.csproj -c Release -o artifacts/nuget
+        run: dotnet pack NuGet/StaticGraphics/Shiroka.Avalonia.StaticLink.csproj -c Release -o artifacts/nuget
 
       - name: Upload NuGet artifact
         uses: actions/upload-artifact@v4

@@ -4,8 +4,8 @@
         <IsPackable>true</IsPackable>
         <NoBuild>true</NoBuild>
         <IncludeBuildOutput>false</IncludeBuildOutput>
-        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-        <PackageId>Greepar.Avalonia.StaticGraphics</PackageId>
+        <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
+        <PackageId>Shiroka.Avalonia.StaticLink</PackageId>
         <Version>3.119.2-7151.4</Version>
         <Authors>greepar</Authors>
         <Company>greepar</Company>
@@ -19,9 +19,14 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="SkiaSharp" Version="3.119.2" />
+    </ItemGroup>
+
+    <ItemGroup>
         <None Include="README.md" Pack="true" PackagePath="" />
-        <None Include="buildTransitive/Greepar.Avalonia.StaticGraphics.props" Pack="true" PackagePath="buildTransitive/$(PackageId).props" />
-        <None Include="buildTransitive/Greepar.Avalonia.StaticGraphics.targets" Pack="true" PackagePath="buildTransitive/$(PackageId).targets" />
+        <None Include="lib/net10.0/_._" Pack="true" PackagePath="lib/net10.0/_._" />
+        <None Include="buildTransitive/Shiroka.Avalonia.StaticLink.props" Pack="true" PackagePath="buildTransitive/$(PackageId).props" />
+        <None Include="buildTransitive/Shiroka.Avalonia.StaticLink.targets" Pack="true" PackagePath="buildTransitive/$(PackageId).targets" />
         <None Include="../../External/NativeStatic/win-x64/*" Pack="true" PackagePath="static/win-x64/native/" />
         <None Include="../../External/NativeStatic/win-arm64/*" Pack="true" PackagePath="static/win-arm64/native/" />
         <None Include="../../External/NativeStatic/linux-x64/*" Pack="true" PackagePath="static/linux-x64/native/" />

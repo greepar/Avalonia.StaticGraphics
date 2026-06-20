@@ -1,4 +1,4 @@
-# Greepar.Avalonia.StaticGraphics
+# Shiroka.Avalonia.StaticLink
 
 Static graphics libraries for Avalonia NativeAOT single-file publishing.
 
@@ -36,7 +36,7 @@ Linux and macOS:
 ## Install
 
 ```bash
-dotnet add package Greepar.Avalonia.StaticGraphics
+dotnet add package Shiroka.Avalonia.StaticLink
 ```
 
 ## Publish
@@ -104,13 +104,13 @@ Build scripts:
 Build locally after the static archives exist:
 
 ```bash
-dotnet pack NuGet/StaticGraphics/Greepar.Avalonia.StaticGraphics.csproj -c Release -o artifacts/nuget
+dotnet pack NuGet/StaticGraphics/Shiroka.Avalonia.StaticLink.csproj -c Release -o artifacts/nuget
 ```
 
 The package will be written to:
 
 ```text
-artifacts/nuget/Greepar.Avalonia.StaticGraphics.*.nupkg
+artifacts/nuget/Shiroka.Avalonia.StaticLink.*.nupkg
 ```
 
 ## GitHub Actions
