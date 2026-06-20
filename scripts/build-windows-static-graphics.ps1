@@ -16,6 +16,10 @@ $BuildJobs = if ($env:BUILD_JOBS) { $env:BUILD_JOBS } else { [Environment]::Proc
 $AnglePatchDir = if ($env:ANGLE_PATCH_DIR) { $env:ANGLE_PATCH_DIR } else { Join-Path $RootDir "External\NativeStatic\patches" }
 $SkiaDepsRetries = if ($env:SKIA_DEPS_RETRIES) { [int]$env:SKIA_DEPS_RETRIES } else { 3 }
 
+if (-not $env:DEPOT_TOOLS_WIN_TOOLCHAIN) {
+    $env:DEPOT_TOOLS_WIN_TOOLCHAIN = "0"
+}
+
 function Require-Command($Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         throw "Missing required command: $Name"

@@ -82,6 +82,7 @@ jobs:
         env:
           RID: ${{ matrix.rid }}
           TARGET_CPU: ${{ matrix.target_cpu }}
+          DEPOT_TOOLS_WIN_TOOLCHAIN: 0
         run: .\scripts\build-windows-static-graphics.ps1 all
 
       - name: Upload Windows static archives
