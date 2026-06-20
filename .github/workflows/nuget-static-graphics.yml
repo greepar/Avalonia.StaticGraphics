@@ -136,6 +136,11 @@ jobs:
           TARGET_CPU: ${{ matrix.target_cpu }}
         run: scripts/build-macos-static-graphics.sh all
 
+      - name: Build macOS font preinit object
+        env:
+          RID: ${{ matrix.rid }}
+        run: bash scripts/build-macos-font-preinit.sh
+
       - name: Upload macOS static archives
         uses: actions/upload-artifact@v4
         with:

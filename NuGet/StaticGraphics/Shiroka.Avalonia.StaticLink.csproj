@@ -6,7 +6,7 @@
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
         <PackageId>Shiroka.Avalonia.StaticLink</PackageId>
-        <Version>3.119.2-7151.7</Version>
+        <Version>3.119.2-7151.9</Version>
         <Authors>greepar</Authors>
         <Company>greepar</Company>
         <Description>Static SkiaSharp, HarfBuzzSharp, and ANGLE libraries for Avalonia NativeAOT single-file publishing.</Description>
@@ -27,6 +27,7 @@
         <None Include="lib/net10.0/_._" Pack="true" PackagePath="lib/net10.0/_._" />
         <None Include="buildTransitive/Shiroka.Avalonia.StaticLink.props" Pack="true" PackagePath="buildTransitive/$(PackageId).props" />
         <None Include="buildTransitive/Shiroka.Avalonia.StaticLink.targets" Pack="true" PackagePath="buildTransitive/$(PackageId).targets" />
+        <None Include="buildTransitive/Shiroka.Avalonia.StaticLink.MacOSFontWarmup.cs" Pack="true" PackagePath="buildTransitive/Shiroka.Avalonia.StaticLink.MacOSFontWarmup.cs" />
         <None Include="../../External/NativeStatic/win-x64/*" Pack="true" PackagePath="static/win-x64/native/" />
         <None Include="../../External/NativeStatic/win-arm64/*" Pack="true" PackagePath="static/win-arm64/native/" />
         <None Include="../../External/NativeStatic/linux-x64/*" Pack="true" PackagePath="static/linux-x64/native/" />

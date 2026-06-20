@@ -45,6 +45,9 @@ jobs:
       - name: Build macOS static graphics libraries
         run: bash ./scripts/build-macos-static-graphics.sh all
 
+      - name: Build macOS font preinit object
+        run: bash ./scripts/build-macos-font-preinit.sh
+
       - name: List native outputs
         run: find "External/NativeStatic/${{ matrix.rid }}/native" -maxdepth 1 -type f -print
 
