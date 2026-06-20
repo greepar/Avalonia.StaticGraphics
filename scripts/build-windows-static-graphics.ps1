@@ -19,6 +19,24 @@ $SkiaDepsRetries = if ($env:SKIA_DEPS_RETRIES) { [int]$env:SKIA_DEPS_RETRIES } e
 if (-not $env:DEPOT_TOOLS_WIN_TOOLCHAIN) {
     $env:DEPOT_TOOLS_WIN_TOOLCHAIN = "0"
 }
+if ($env:DEPOT_TOOLS_WIN_TOOLCHAIN -eq "0") {
+    if (-not $env:GYP_MSVS_VERSION) {
+        $env:GYP_MSVS_VERSION = "2022"
+    }
+    if (-not $env:GYP_MSVS_OVERRIDE_PATH) {
+        if ($env:VSINSTALLDIR) {
+            $env:GYP_MSVS_OVERRIDE_PATH = $env:VSINSTALLDIR.TrimEnd("\", "/")
+        } else {
+            $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vswhere) {
+                $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+                if ($vsPath) {
+                    $env:GYP_MSVS_OVERRIDE_PATH = $vsPath.TrimEnd("\", "/")
+                }
+            }
+        }
+    }
+}
 
 function Require-Command($Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {

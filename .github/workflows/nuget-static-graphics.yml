@@ -35,7 +35,7 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld llvm g++ ninja-build pkg-config libfontconfig1-dev libglib2.0-dev libx11-dev libxcb1-dev
+          sudo apt-get install -y clang lld llvm g++ ninja-build pkg-config libfontconfig1-dev libglib2.0-dev libpci-dev libx11-dev libxcb1-dev
 
       - name: Build Linux static graphics libraries
         env:
