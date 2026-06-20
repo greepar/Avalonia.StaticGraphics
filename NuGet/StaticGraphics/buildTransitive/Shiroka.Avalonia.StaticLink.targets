@@ -84,6 +84,14 @@
         </ItemGroup>
     </Target>
 
+    <Target Name="ShirokaAvaloniaStaticLinkValidateMacOSStaticLibraries"
+            BeforeTargets="LinkNative"
+            Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'osx-x64' or '$(RuntimeIdentifier)' == 'osx-arm64') and '$(_ShirokaAvaloniaStaticLinkNativeRoot)' != ''">
+        <Error Condition="!Exists('$(_ShirokaAvaloniaStaticLinkNativeRoot)/libHarfBuzzSharp.a')" Text="Missing static library: $(_ShirokaAvaloniaStaticLinkNativeRoot)/libHarfBuzzSharp.a" />
+        <Error Condition="!Exists('$(_ShirokaAvaloniaStaticLinkNativeRoot)/libskia.a')" Text="Missing static library: $(_ShirokaAvaloniaStaticLinkNativeRoot)/libskia.a" />
+        <Error Condition="!Exists('$(_ShirokaAvaloniaStaticLinkNativeRoot)/libSkiaSharp.a')" Text="Missing static library: $(_ShirokaAvaloniaStaticLinkNativeRoot)/libSkiaSharp.a" />
+    </Target>
+
     <Target Name="ShirokaAvaloniaStaticLinkCleanDynamicAssets"
             AfterTargets="Publish"
             Condition="'$(PublishAot)' == 'true' and '$(_ShirokaAvaloniaStaticLinkNativeRoot)' != ''">
