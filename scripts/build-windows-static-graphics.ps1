@@ -31,9 +31,9 @@ function Ensure-Tools {
 function Ensure-DepotTools {
     $depotDir = Join-Path $WorkDir "depot_tools"
     if (-not (Test-Path (Join-Path $depotDir ".git"))) {
-        git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotDir
+        $null = git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotDir
     } else {
-        git -C $depotDir pull --ff-only
+        $null = git -C $depotDir pull --ff-only
     }
     $env:PATH = "$depotDir;$env:PATH"
 }
@@ -52,12 +52,12 @@ function Copy-FirstExisting($Destination, [string[]]$Candidates) {
 function Sync-SkiaSharp {
     $src = Join-Path $WorkDir "SkiaSharp-$SkiaSharpVersion"
     if (-not (Test-Path (Join-Path $src ".git"))) {
-        git -c core.longpaths=true clone --depth 1 --branch "release/$SkiaSharpVersion" https://github.com/mono/SkiaSharp.git $src
+        $null = git -c core.longpaths=true clone --depth 1 --branch "release/$SkiaSharpVersion" https://github.com/mono/SkiaSharp.git $src
     } else {
-        git -C $src fetch --depth 1 origin "release/$SkiaSharpVersion"
-        git -C $src checkout -q FETCH_HEAD
+        $null = git -C $src fetch --depth 1 origin "release/$SkiaSharpVersion"
+        $null = git -C $src checkout -q FETCH_HEAD
     }
-    git -C $src submodule update --init --depth 1 externals/skia
+    $null = git -C $src submodule update --init --depth 1 externals/skia
     return $src
 }
 
@@ -118,10 +118,10 @@ extra_cflags_cc = [ "/GR" ]
 function Sync-Angle {
     $src = Join-Path $WorkDir "ANGLE-$AngleBranch"
     if (-not (Test-Path (Join-Path $src ".git"))) {
-        git -c core.longpaths=true clone --depth 1 --branch "chromium/$AngleBranch" https://github.com/google/angle.git $src
+        $null = git -c core.longpaths=true clone --depth 1 --branch "chromium/$AngleBranch" https://github.com/google/angle.git $src
     } else {
-        git -C $src fetch --depth 1 origin "chromium/$AngleBranch"
-        git -C $src checkout -q FETCH_HEAD
+        $null = git -C $src fetch --depth 1 origin "chromium/$AngleBranch"
+        $null = git -C $src checkout -q FETCH_HEAD
     }
     return $src
 }
@@ -129,7 +129,7 @@ function Sync-Angle {
 function Apply-AnglePatches($Src) {
     $patch = Join-Path $AnglePatchDir "angle-chromium-$AngleBranch.patch"
     if ((Test-Path $patch) -and -not (Select-String -Path (Join-Path $Src "BUILD.gn") -Pattern 'angle_static_library\("libANGLE_static"\)' -Quiet)) {
-        git -C $Src apply $patch
+        $null = git -C $Src apply $patch
     }
 }
 
