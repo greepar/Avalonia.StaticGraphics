@@ -7,9 +7,11 @@
 
     <ItemGroup Condition="'$(PublishAot)' == 'true' and '$(_StaticLinkAvaloniaNativeRoot)' != ''">
         <Compile Include="$(MSBuildThisFileDirectory)StaticLink.Avalonia.Native.MacOSFontWarmup.cs" Link="StaticLink.Avalonia.Native.MacOSFontWarmup.cs" Condition="Exists('$(MSBuildThisFileDirectory)StaticLink.Avalonia.Native.MacOSFontWarmup.cs')" />
-        <DirectPInvoke Include="libAvaloniaNative" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
-        <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/macos_font_preinit.o" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/macos_font_preinit.o')" />
-        <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
+        <DirectPInvoke Include="libAvaloniaNative" />
+        <DirectPInvoke Include="libAvaloniaNative.dylib" />
+        <DirectPInvoke Include="AvaloniaNative" />
+        <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/macos_font_preinit.o" />
+        <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a" />
         <NativeSystemLibrary Include="c++" />
         <LinkerArg Include="-framework AppKit" />
         <LinkerArg Include="-framework Carbon" />
@@ -35,11 +37,14 @@
         <MakeDir Directories="$(NativeIntermediateOutputPath)" />
         <WriteLinesToFile File="$(_StaticLinkAvaloniaNativeDirectPInvokeList)" Lines="@(_StaticLinkAvaloniaNativeDirectPInvoke)" Overwrite="true" />
         <ItemGroup>
-            <DirectPInvoke Include="libAvaloniaNative" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
-            <DirectPInvoke Include="libAvaloniaNative.dylib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
-            <DirectPInvoke Include="AvaloniaNative" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
-            <DirectPInvokeList Include="$(_StaticLinkAvaloniaNativeDirectPInvokeList)" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
+            <DirectPInvoke Include="libAvaloniaNative" />
+            <DirectPInvoke Include="libAvaloniaNative.dylib" />
+            <DirectPInvoke Include="AvaloniaNative" />
+            <DirectPInvokeList Include="$(_StaticLinkAvaloniaNativeDirectPInvokeList)" />
         </ItemGroup>
+        <Error Condition="!Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" Text="StaticLink.Avalonia.Native could not find $(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a. Check the package version and restore cache." />
+        <Error Condition="!Exists('$(_StaticLinkAvaloniaNativeRoot)/macos_font_preinit.o')" Text="StaticLink.Avalonia.Native could not find $(_StaticLinkAvaloniaNativeRoot)/macos_font_preinit.o. Check the package version and restore cache." />
+        <Message Importance="high" Text="StaticLink.Avalonia.Native Root: $(_StaticLinkAvaloniaNativeRoot)" />
         <Message Importance="high" Text="StaticLink.Avalonia.Native DirectPInvoke: @(DirectPInvoke)" />
         <Message Importance="high" Text="StaticLink.Avalonia.Native DirectPInvokeList: @(DirectPInvokeList)" />
         <Message Importance="high" Text="StaticLink.Avalonia.Native NativeLibrary: @(NativeLibrary)" />
