@@ -24,10 +24,25 @@
     <Target Name="StaticLinkAvaloniaNativeAddMacOSDirectPInvokes"
             BeforeTargets="WriteIlcRspFileForCompilation"
             Condition="'$(PublishAot)' == 'true' and '$(_StaticLinkAvaloniaNativeRoot)' != ''">
+        <PropertyGroup>
+            <_StaticLinkAvaloniaNativeDirectPInvokeList>$(NativeIntermediateOutputPath)staticlink-avalonia-native.directpinvokes.txt</_StaticLinkAvaloniaNativeDirectPInvokeList>
+        </PropertyGroup>
+        <ItemGroup>
+            <_StaticLinkAvaloniaNativeDirectPInvoke Include="libAvaloniaNative" />
+            <_StaticLinkAvaloniaNativeDirectPInvoke Include="libAvaloniaNative.dylib" />
+            <_StaticLinkAvaloniaNativeDirectPInvoke Include="AvaloniaNative" />
+        </ItemGroup>
+        <MakeDir Directories="$(NativeIntermediateOutputPath)" />
+        <WriteLinesToFile File="$(_StaticLinkAvaloniaNativeDirectPInvokeList)" Lines="@(_StaticLinkAvaloniaNativeDirectPInvoke)" Overwrite="true" />
         <ItemGroup>
             <DirectPInvoke Include="libAvaloniaNative" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
             <DirectPInvoke Include="libAvaloniaNative.dylib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
+            <DirectPInvoke Include="AvaloniaNative" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
+            <DirectPInvokeList Include="$(_StaticLinkAvaloniaNativeDirectPInvokeList)" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libAvaloniaNative.a')" />
         </ItemGroup>
+        <Message Importance="high" Text="StaticLink.Avalonia.Native DirectPInvoke: @(DirectPInvoke)" />
+        <Message Importance="high" Text="StaticLink.Avalonia.Native DirectPInvokeList: @(DirectPInvokeList)" />
+        <Message Importance="high" Text="StaticLink.Avalonia.Native NativeLibrary: @(NativeLibrary)" />
     </Target>
 
     <Target Name="StaticLinkAvaloniaNativeCleanDynamicAssets"
