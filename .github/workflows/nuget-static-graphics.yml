@@ -1,4 +1,4 @@
-name: nuget-static-graphics
+name: staticlink-avalonia
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
         type: boolean
   push:
     tags:
-      - "static-graphics-v*"
+      - "staticlink-avalonia-v*"
 
 env:
   SKIASHARP_VERSION: "3.119.2"
@@ -121,24 +121,35 @@ jobs:
         include:
           - rid: osx-x64
             target_cpu: x64
+            runner: macos-14
           - rid: osx-arm64
             target_cpu: arm64
-    runs-on: macos-latest
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    env:
+      RID: ${{ matrix.rid }}
+      TARGET_CPU: ${{ matrix.target_cpu }}
+      WORK_DIR: ${{ github.workspace }}/External/NativeStatic/.work
+      OUTPUT_DIR: ${{ github.workspace }}/External/NativeStatic/${{ matrix.rid }}/native
+      AVALONIA_VERSION: 11.3.14
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup .NET for Avalonia header generation
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
 
       - name: Install native build dependencies
         run: brew install ninja
 
+      - name: Build static AvaloniaNative
+        run: bash ./scripts/build-macos-avalonia-native-static.sh
+
       - name: Build macOS static graphics libraries
-        env:
-          RID: ${{ matrix.rid }}
-          TARGET_CPU: ${{ matrix.target_cpu }}
-        run: scripts/build-macos-static-graphics.sh all
+        run: bash ./scripts/build-macos-static-graphics.sh all
 
       - name: Build macOS font preinit object
-        env:
-          RID: ${{ matrix.rid }}
         run: bash scripts/build-macos-font-preinit.sh
 
       - name: Upload macOS static archives
@@ -182,35 +193,40 @@ jobs:
       - name: Verify static archives
         run: |
           for rid in linux-x64 linux-arm64 osx-x64 osx-arm64; do
-            test -f External/NativeStatic/$rid/libskia.a
-            test -f External/NativeStatic/$rid/libSkiaSharp.a
-            test -f External/NativeStatic/$rid/libHarfBuzzSharp.a
-            test -f External/NativeStatic/$rid/libANGLE_static.a
-            test -f External/NativeStatic/$rid/libGLESv2_static.a
+            test -f External/NativeStatic/$rid/native/libskia.a
+            test -f External/NativeStatic/$rid/native/libSkiaSharp.a
+            test -f External/NativeStatic/$rid/native/libHarfBuzzSharp.a
+            test -f External/NativeStatic/$rid/native/libANGLE_static.a
+            test -f External/NativeStatic/$rid/native/libGLESv2_static.a
+          done
+
+          for rid in osx-x64 osx-arm64; do
+            test -f External/NativeStatic/$rid/native/libAvaloniaNative.a
+            test -f External/NativeStatic/$rid/native/macos_font_preinit.o
           done
 
           for rid in win-x64 win-arm64; do
-            test -f External/NativeStatic/$rid/skia.lib
-            test -f External/NativeStatic/$rid/SkiaSharp.lib
-            test -f External/NativeStatic/$rid/libHarfBuzzSharp.lib
-            test -f External/NativeStatic/$rid/libANGLE_static.lib
-            test -f External/NativeStatic/$rid/libGLESv2_static.lib
+            test -f External/NativeStatic/$rid/native/skia.lib
+            test -f External/NativeStatic/$rid/native/SkiaSharp.lib
+            test -f External/NativeStatic/$rid/native/libHarfBuzzSharp.lib
+            test -f External/NativeStatic/$rid/native/libANGLE_static.lib
+            test -f External/NativeStatic/$rid/native/libGLESv2_static.lib
           done
 
       - name: Pack NuGet package
-        run: dotnet pack NuGet/StaticGraphics/Shiroka.Avalonia.StaticLink.csproj -c Release -o artifacts/nuget
+        run: dotnet pack NuGet/StaticGraphics/StaticLink.Avalonia.csproj -c Release -o artifacts/nuget
 
       - name: Upload NuGet artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nuget-static-graphics
+          name: staticlink-avalonia-nuget
           path: |
             artifacts/nuget/*.nupkg
             artifacts/nuget/*.snupkg
           if-no-files-found: error
 
       - name: Publish to nuget.org
-        if: ${{ startsWith(github.ref, 'refs/tags/static-graphics-v') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_nuget == true) }}
+        if: ${{ startsWith(github.ref, 'refs/tags/staticlink-avalonia-v') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_nuget == true) }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
@@ -270,16 +286,16 @@ jobs:
       - name: Download NuGet package
         uses: actions/download-artifact@v4
         with:
-          name: nuget-static-graphics
+          name: staticlink-avalonia-nuget
           path: artifacts/nuget
 
       - name: Publish Avalonia single-file smoke app
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $package = Get-ChildItem -Path "artifacts/nuget" -Filter "Shiroka.Avalonia.StaticLink.*.nupkg" | Select-Object -First 1
+          $package = Get-ChildItem -Path "artifacts/nuget" -Filter "StaticLink.Avalonia.*.nupkg" | Select-Object -First 1
           if (-not $package) { throw "StaticLink NuGet package was not downloaded." }
-          if ($package.BaseName -notmatch '^Shiroka\.Avalonia\.StaticLink\.(.+)$') { throw "Unexpected package name: $($package.Name)" }
+          if ($package.BaseName -notmatch '^StaticLink\.Avalonia\.(.+)$') { throw "Unexpected package name: $($package.Name)" }
           $version = $Matches[1]
           $projectDir = Join-Path $PWD "artifacts/avalonia-smoke-src"
           pwsh ./scripts/create-avalonia-smoke.ps1 -ProjectDir $projectDir -NuGetSource (Resolve-Path "artifacts/nuget") -StaticLinkVersion $version
@@ -298,13 +314,53 @@ jobs:
         run: |
           $publishDir = "artifacts/smoke-${{ matrix.rid }}"
           $blocked = Get-ChildItem -Path $publishDir -Recurse -File | Where-Object {
-            $_.Name -in @("libSkiaSharp.dll", "libHarfBuzzSharp.dll", "av_libglesv2.dll", "libSkiaSharp.so", "libHarfBuzzSharp.so", "libSkiaSharp.dylib", "libHarfBuzzSharp.dylib")
+            $_.Name -in @("libSkiaSharp.dll", "libHarfBuzzSharp.dll", "av_libglesv2.dll", "libSkiaSharp.so", "libHarfBuzzSharp.so", "libAvaloniaNative.dylib", "libSkiaSharp.dylib", "libHarfBuzzSharp.dylib")
           }
           if ($blocked) {
             $blocked | ForEach-Object { Write-Error "Unexpected dynamic graphics library: $($_.FullName)" }
             exit 1
           }
           Get-ChildItem -Path $publishDir -Recurse -File | ForEach-Object { $_.FullName }
+
+      - name: Run macOS Avalonia smoke app
+        if: ${{ startsWith(matrix.rid, 'osx-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "artifacts/smoke-${{ matrix.rid }}"
+          chmod +x ./AvaloniaStaticLinkSmoke
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          import sys
+
+          log = pathlib.Path("avalonia-smoke-run.log")
+          proc = subprocess.Popen(
+              ["./AvaloniaStaticLinkSmoke"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT,
+              text=True,
+          )
+
+          try:
+              output, _ = proc.communicate(timeout=15)
+          except subprocess.TimeoutExpired:
+              proc.kill()
+              output, _ = proc.communicate()
+              log.write_text(output or "")
+              print(output or "")
+              print("Avalonia smoke app stayed alive for 15 seconds.")
+              sys.exit(0)
+
+          log.write_text(output or "")
+          print(output or "")
+          if proc.returncode == 0:
+              print("Avalonia smoke app exited normally.")
+              sys.exit(0)
+
+          print(f"Avalonia smoke app failed with exit code {proc.returncode}.", file=sys.stderr)
+          sys.exit(proc.returncode if proc.returncode > 0 else 1)
+          PY
 
       - name: Upload Avalonia smoke app
         uses: actions/upload-artifact@v4
@@ -318,10 +374,12 @@ jobs:
     needs:
       - pack
       - smoke-avalonia
-    if: ${{ startsWith(github.ref, 'refs/tags/static-graphics-v') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_release == true) }}
+    if: ${{ startsWith(github.ref, 'refs/tags/staticlink-avalonia-v') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_release == true) }}
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
@@ -330,7 +388,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release-files
-          find release-artifacts/nuget-static-graphics -type f \( -name '*.nupkg' -o -name '*.snupkg' \) -exec cp {} release-files/ \;
+          find release-artifacts/staticlink-avalonia-nuget -type f \( -name '*.nupkg' -o -name '*.snupkg' \) -exec cp {} release-files/ \;
           for dir in release-artifacts/avalonia-smoke-*; do
             [ -d "$dir" ] || continue
             name="$(basename "$dir")"
@@ -346,8 +404,8 @@ jobs:
             release_tag="${GITHUB_REF_NAME}"
             title="${GITHUB_REF_NAME}"
           else
-            release_tag="static-graphics-smoke-${GITHUB_RUN_NUMBER}"
-            title="Static graphics smoke ${GITHUB_RUN_NUMBER}"
+            release_tag="staticlink-avalonia-smoke-${GITHUB_RUN_NUMBER}"
+            title="StaticLink.Avalonia smoke ${GITHUB_RUN_NUMBER}"
           fi
 
           if gh release view "$release_tag" >/dev/null 2>&1; then

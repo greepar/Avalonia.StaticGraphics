@@ -2,7 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Shiroka.Avalonia.StaticLink;
+namespace StaticLink.Avalonia;
 
 internal static class MacOSFontWarmup
 {

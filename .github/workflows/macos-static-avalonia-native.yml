@@ -93,7 +93,7 @@ jobs:
 
       - name: Pack experimental NuGet package
         run: |
-          dotnet pack NuGet/StaticGraphics/Shiroka.Avalonia.StaticLink.csproj \
+          dotnet pack NuGet/StaticGraphics/StaticLink.Avalonia.csproj \
             -c Release \
             -o artifacts/nuget \
             /p:PackageVersion=${{ steps.version.outputs.package_version }} \

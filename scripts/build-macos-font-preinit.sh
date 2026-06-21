@@ -19,7 +19,7 @@ cat > "$src" <<'OBJC'
 #import <objc/runtime.h>
 
 __attribute__((constructor(101)))
-static void ShirokaAvaloniaStaticLinkPreinitializeAppKitFonts(void)
+static void StaticLinkAvaloniaPreinitializeAppKitFonts(void)
 {
     @autoreleasepool
     {

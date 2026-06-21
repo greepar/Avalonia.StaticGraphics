@@ -44,7 +44,7 @@ New-Item -ItemType Directory -Path $ProjectDir -Force | Out-Null
     <PackageReference Include="Avalonia" Version="11.3.14" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.14" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.14" />
-    <PackageReference Include="Shiroka.Avalonia.StaticLink" Version="$StaticLinkVersion" />
+    <PackageReference Include="StaticLink.Avalonia" Version="$StaticLinkVersion" />
   </ItemGroup>
 </Project>
 "@ | Set-Content -Path (Join-Path $ProjectDir "AvaloniaStaticLinkSmoke.csproj") -Encoding UTF8
