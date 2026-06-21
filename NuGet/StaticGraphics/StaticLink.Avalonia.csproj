@@ -6,7 +6,7 @@
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
         <PackageId>StaticLink.Avalonia</PackageId>
-        <Version>3.119.2-7151.9</Version>
+        <Version>3.119.2-7151.10</Version>
         <Authors>greepar</Authors>
         <Company>greepar</Company>
         <Description>Static SkiaSharp, HarfBuzzSharp, and ANGLE libraries for Avalonia NativeAOT single-file publishing.</Description>
