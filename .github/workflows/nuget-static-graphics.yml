@@ -1,0 +1,493 @@
+name: staticlink-avalonia
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_to_nuget:
+        description: Publish package to nuget.org
+        required: true
+        default: false
+        type: boolean
+      publish_to_release:
+        description: Publish NuGet package and smoke apps to GitHub Release
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - "staticlink-avalonia-v*"
+
+env:
+  SKIASHARP_VERSION: "3.119.2"
+  ANGLE_BRANCH: "7151"
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            target_cpu: x64
+            runner: ubuntu-latest
+          - rid: linux-arm64
+            target_cpu: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm g++ ninja-build pkg-config libfontconfig1-dev libglib2.0-dev libgl1-mesa-dev libpci-dev libx11-dev libxcb1-dev libxext-dev
+
+      - name: Build Linux static graphics libraries
+        env:
+          RID: ${{ matrix.rid }}
+          TARGET_CPU: ${{ matrix.target_cpu }}
+          LLVM_AR: llvm-ar
+        run: scripts/build-linux-static-graphics.sh all
+
+      - name: Upload Linux static archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-static-${{ matrix.rid }}
+          path: External/NativeStatic/${{ matrix.rid }}/*
+          if-no-files-found: error
+
+  build-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            target_cpu: x64
+            msvc_arch: x64
+          - rid: win-arm64
+            target_cpu: arm64
+            msvc_arch: amd64_arm64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Configure Chromium Visual Studio environment
+        shell: pwsh
+        run: |
+          "DEPOT_TOOLS_WIN_TOOLCHAIN=0" >> $env:GITHUB_ENV
+          "GYP_MSVS_VERSION=17.0" >> $env:GITHUB_ENV
+          "GYP_MSVS_OVERRIDE_PATH=$($env:VSINSTALLDIR.TrimEnd('\', '/'))" >> $env:GITHUB_ENV
+
+      - name: Install native build dependencies
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          choco install ninja llvm -y
+
+      - name: Validate Windows ANGLE inputs
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          TARGET_CPU: ${{ matrix.target_cpu }}
+          DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+          GYP_MSVS_VERSION: 17.0
+        run: .\scripts\build-windows-static-graphics.ps1 angle-preflight
+
+      - name: Build Windows static graphics libraries
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          TARGET_CPU: ${{ matrix.target_cpu }}
+          DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+          GYP_MSVS_VERSION: 17.0
+        run: .\scripts\build-windows-static-graphics.ps1 all
+
+      - name: Upload Windows static archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-static-${{ matrix.rid }}
+          path: External/NativeStatic/${{ matrix.rid }}/*
+          if-no-files-found: error
+
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            target_cpu: x64
+            runner: macos-14
+          - rid: osx-arm64
+            target_cpu: arm64
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    env:
+      RID: ${{ matrix.rid }}
+      TARGET_CPU: ${{ matrix.target_cpu }}
+      WORK_DIR: ${{ github.workspace }}/External/NativeStatic/.work
+      OUTPUT_DIR: ${{ github.workspace }}/External/NativeStatic/${{ matrix.rid }}/native
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: brew install ninja
+
+      - name: Build macOS static graphics libraries
+        run: bash ./scripts/build-macos-static-graphics.sh all
+
+      - name: Build macOS font preinit object
+        run: bash scripts/build-macos-font-preinit.sh
+
+      - name: Upload macOS static archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-static-${{ matrix.rid }}
+          path: External/NativeStatic/${{ matrix.rid }}/*
+          if-no-files-found: error
+
+  build-macos-avalonia-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            runner: macos-14
+            avalonia_version: 11.3.14
+          - rid: osx-arm64
+            runner: macos-latest
+            avalonia_version: 11.3.14
+          - rid: osx-x64
+            runner: macos-14
+            avalonia_version: 12.0.3
+          - rid: osx-arm64
+            runner: macos-latest
+            avalonia_version: 12.0.3
+    runs-on: ${{ matrix.runner }}
+    env:
+      RID: ${{ matrix.rid }}
+      WORK_DIR: ${{ github.workspace }}/External/NativeStatic/.work
+      OUTPUT_DIR: ${{ github.workspace }}/External/NativeStatic/${{ matrix.rid }}/native
+      AVALONIA_VERSION: ${{ matrix.avalonia_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET for Avalonia header generation
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build static AvaloniaNative
+        run: bash ./scripts/build-macos-avalonia-native-static.sh
+
+      - name: Build macOS font preinit object
+        run: bash scripts/build-macos-font-preinit.sh
+
+      - name: Upload static AvaloniaNative
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-avalonia-${{ matrix.avalonia_version }}-${{ matrix.rid }}
+          path: |
+            External/NativeStatic/${{ matrix.rid }}/native/libAvaloniaNative.a
+            External/NativeStatic/${{ matrix.rid }}/native/macos_font_preinit.o
+          if-no-files-found: error
+
+  pack:
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux
+      - build-windows
+      - build-macos
+      - build-macos-avalonia-native
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download static archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-static-*
+          path: External/NativeStatic
+          merge-multiple: false
+
+      - name: Download static AvaloniaNative archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-avalonia-*
+          path: External/AvaloniaNative
+          merge-multiple: false
+
+      - name: Move static archives into RID directories
+        run: |
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+            mkdir -p "External/NativeStatic/$rid"
+            mv "External/NativeStatic/native-static-$rid"/* "External/NativeStatic/$rid/"
+            rmdir "External/NativeStatic/native-static-$rid"
+            if [ ! -d "External/NativeStatic/$rid/native" ]; then
+              mkdir -p "External/NativeStatic/$rid/native"
+              find "External/NativeStatic/$rid" -maxdepth 1 -type f -exec mv {} "External/NativeStatic/$rid/native/" \;
+            fi
+          done
+
+      - name: Verify static archives
+        run: |
+          for rid in linux-x64 linux-arm64 osx-x64 osx-arm64; do
+            test -f External/NativeStatic/$rid/native/libskia.a
+            test -f External/NativeStatic/$rid/native/libSkiaSharp.a
+            test -f External/NativeStatic/$rid/native/libHarfBuzzSharp.a
+            test -f External/NativeStatic/$rid/native/libANGLE_static.a
+            test -f External/NativeStatic/$rid/native/libGLESv2_static.a
+          done
+
+          for rid in win-x64 win-arm64; do
+            test -f External/NativeStatic/$rid/native/skia.lib
+            test -f External/NativeStatic/$rid/native/SkiaSharp.lib
+            test -f External/NativeStatic/$rid/native/libHarfBuzzSharp.lib
+            test -f External/NativeStatic/$rid/native/libANGLE_static.lib
+            test -f External/NativeStatic/$rid/native/libGLESv2_static.lib
+          done
+
+      - name: Pack NuGet package
+        run: |
+          dotnet pack NuGet/StaticGraphics/StaticLink.Avalonia.csproj -c Release -o artifacts/nuget
+          for version in 11.3.14 12.0.3; do
+            mkdir -p External/NativeStatic/osx-x64/native External/NativeStatic/osx-arm64/native
+            cp External/AvaloniaNative/native-avalonia-$version-osx-x64/* External/NativeStatic/osx-x64/native/
+            cp External/AvaloniaNative/native-avalonia-$version-osx-arm64/* External/NativeStatic/osx-arm64/native/
+            dotnet pack NuGet/AvaloniaNative/StaticLink.Avalonia.Native.csproj \
+              -c Release \
+              -o artifacts/nuget \
+              /p:PackageVersion=$version.1 \
+              /p:Version=$version.1
+          done
+
+      - name: Upload NuGet artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staticlink-avalonia-nuget
+          path: |
+            artifacts/nuget/*.nupkg
+            artifacts/nuget/*.snupkg
+          if-no-files-found: error
+
+      - name: Publish to nuget.org
+        if: ${{ startsWith(github.ref, 'refs/tags/staticlink-avalonia-v') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_nuget == true) }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "NUGET_API_KEY secret is not configured. Skipping publish."
+            exit 0
+          fi
+
+          for package in artifacts/nuget/*.nupkg; do
+            dotnet nuget push "$package" \
+              --source "https://api.nuget.org/v3/index.json" \
+              --api-key "$NUGET_API_KEY" \
+              --skip-duplicate
+          done
+
+  smoke-avalonia:
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-2022
+            msvc_arch: x64
+          - rid: win-arm64
+            runner: windows-2022
+            msvc_arch: amd64_arm64
+          - rid: linux-x64
+            runner: ubuntu-latest
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+          - rid: osx-x64
+            runner: macos-14
+            avalonia_version: 11.3.14
+            native_version: 11.3.14.1
+          - rid: osx-arm64
+            runner: macos-latest
+            avalonia_version: 11.3.14
+            native_version: 11.3.14.1
+          - rid: osx-x64
+            runner: macos-14
+            avalonia_version: 12.0.3
+            native_version: 12.0.3.1
+          - rid: osx-arm64
+            runner: macos-latest
+            avalonia_version: 12.0.3
+            native_version: 12.0.3.1
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC environment
+        if: ${{ startsWith(matrix.rid, 'win-') }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Install Linux publish dependencies
+        if: ${{ startsWith(matrix.rid, 'linux-') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld zlib1g-dev libfontconfig1-dev
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download NuGet package
+        uses: actions/download-artifact@v4
+        with:
+          name: staticlink-avalonia-nuget
+          path: artifacts/nuget
+
+      - name: Publish Avalonia single-file smoke app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $package = Get-ChildItem -Path "artifacts/nuget" -Filter "StaticLink.Avalonia.*.nupkg" | Where-Object { $_.Name -notlike "StaticLink.Avalonia.Native.*" } | Select-Object -First 1
+          if (-not $package) { throw "StaticLink NuGet package was not downloaded." }
+          if ($package.BaseName -notmatch '^StaticLink\.Avalonia\.(.+)$') { throw "Unexpected package name: $($package.Name)" }
+          $version = $Matches[1]
+          $nativeVersion = "${{ matrix.native_version }}"
+          $avaloniaVersion = "${{ matrix.avalonia_version }}"
+          if (-not $avaloniaVersion) { $avaloniaVersion = "11.3.14" }
+          if ($nativeVersion) {
+            $nativePackage = Get-ChildItem -Path "artifacts/nuget" -Filter "StaticLink.Avalonia.Native.$nativeVersion.nupkg" | Select-Object -First 1
+            if (-not $nativePackage) { throw "StaticLink AvaloniaNative NuGet package $nativeVersion was not downloaded." }
+          }
+          $projectDir = Join-Path $PWD "artifacts/avalonia-smoke-src"
+          pwsh ./scripts/create-avalonia-smoke.ps1 -ProjectDir $projectDir -NuGetSource (Resolve-Path "artifacts/nuget") -StaticLinkVersion $version -AvaloniaVersion $avaloniaVersion -StaticLinkNativeVersion $nativeVersion
+          dotnet publish (Join-Path $projectDir "AvaloniaStaticLinkSmoke.csproj") `
+            -c Release `
+            -r "${{ matrix.rid }}" `
+            --configfile (Join-Path $projectDir "NuGet.config") `
+            /p:PublishAot=true `
+            /p:SelfContained=true `
+            /p:PublishSingleFile=true `
+            /p:StripSymbols=true `
+            /p:PublishDir="$PWD/artifacts/smoke-${{ matrix.rid }}/"
+
+      - name: Verify no dynamic graphics libraries remain
+        shell: pwsh
+        run: |
+          $publishDir = "artifacts/smoke-${{ matrix.rid }}"
+          $blocked = Get-ChildItem -Path $publishDir -Recurse -File | Where-Object {
+            $_.Name -in @("libSkiaSharp.dll", "libHarfBuzzSharp.dll", "av_libglesv2.dll", "libSkiaSharp.so", "libHarfBuzzSharp.so", "libAvaloniaNative.dylib", "libSkiaSharp.dylib", "libHarfBuzzSharp.dylib")
+          }
+          if ($blocked) {
+            $blocked | ForEach-Object { Write-Error "Unexpected dynamic graphics library: $($_.FullName)" }
+            exit 1
+          }
+          Get-ChildItem -Path $publishDir -Recurse -File | ForEach-Object { $_.FullName }
+
+      - name: Run macOS Avalonia smoke app
+        if: ${{ startsWith(matrix.rid, 'osx-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "artifacts/smoke-${{ matrix.rid }}"
+          chmod +x ./AvaloniaStaticLinkSmoke
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          import sys
+
+          log = pathlib.Path("avalonia-smoke-run.log")
+          proc = subprocess.Popen(
+              ["./AvaloniaStaticLinkSmoke"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT,
+              text=True,
+          )
+
+          try:
+              output, _ = proc.communicate(timeout=15)
+          except subprocess.TimeoutExpired:
+              proc.kill()
+              output, _ = proc.communicate()
+              log.write_text(output or "")
+              print(output or "")
+              print("Avalonia smoke app stayed alive for 15 seconds.")
+              sys.exit(0)
+
+          log.write_text(output or "")
+          print(output or "")
+          if proc.returncode == 0:
+              print("Avalonia smoke app exited normally.")
+              sys.exit(0)
+
+          print(f"Avalonia smoke app failed with exit code {proc.returncode}.", file=sys.stderr)
+          sys.exit(proc.returncode if proc.returncode > 0 else 1)
+          PY
+
+      - name: Upload Avalonia smoke app
+        uses: actions/upload-artifact@v4
+        with:
+          name: avalonia-smoke-${{ matrix.rid }}
+          path: artifacts/smoke-${{ matrix.rid }}/**
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - pack
+      - smoke-avalonia
+    if: ${{ startsWith(github.ref, 'refs/tags/staticlink-avalonia-v') || (github.event_name == 'workflow_dispatch' && inputs.publish_to_release == true) }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          find release-artifacts/staticlink-avalonia-nuget -type f \( -name '*.nupkg' -o -name '*.snupkg' \) -exec cp {} release-files/ \;
+          for dir in release-artifacts/avalonia-smoke-*; do
+            [ -d "$dir" ] || continue
+            name="$(basename "$dir")"
+            (cd "$dir" && zip -r "../../release-files/$name.zip" .)
+          done
+          ls -la release-files
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            release_tag="${GITHUB_REF_NAME}"
+            title="${GITHUB_REF_NAME}"
+          else
+            release_tag="staticlink-avalonia-smoke-${GITHUB_RUN_NUMBER}"
+            title="StaticLink.Avalonia smoke ${GITHUB_RUN_NUMBER}"
+          fi
+
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" release-files/* --clobber
+          else
+            gh release create "$release_tag" release-files/* \
+              --title "$title" \
+              --notes "NuGet package plus Avalonia 11.3.14 NativeAOT single-file smoke apps for win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, and osx-arm64."
+          fi

@@ -1,0 +1,5 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <StaticLinkAvaloniaNativeRoot Condition="'$(StaticLinkAvaloniaNativeRoot)' == ''">$(MSBuildThisFileDirectory)../static/</StaticLinkAvaloniaNativeRoot>
+    </PropertyGroup>
+</Project>

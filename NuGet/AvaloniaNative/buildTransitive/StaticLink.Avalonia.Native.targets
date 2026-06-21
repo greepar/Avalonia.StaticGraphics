@@ -1,0 +1,61 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <_StaticLinkAvaloniaNativePackageRid Condition="'$(RuntimeIdentifier)' == 'osx-x64'">osx-x64</_StaticLinkAvaloniaNativePackageRid>
+        <_StaticLinkAvaloniaNativePackageRid Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">osx-arm64</_StaticLinkAvaloniaNativePackageRid>
+        <_StaticLinkAvaloniaNativePackageRoot Condition="'$(_StaticLinkAvaloniaNativePackageRid)' != ''">$(StaticLinkAvaloniaNativeRoot)$(_StaticLinkAvaloniaNativePackageRid)/native</_StaticLinkAvaloniaNativePackageRoot>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(PublishAot)' == 'true' and '$(_StaticLinkAvaloniaNativePackageRoot)' != ''">
+        <Compile Include="$(MSBuildThisFileDirectory)StaticLink.Avalonia.Native.MacOSFontWarmup.cs" Link="StaticLink.Avalonia.Native.MacOSFontWarmup.cs" Condition="Exists('$(MSBuildThisFileDirectory)StaticLink.Avalonia.Native.MacOSFontWarmup.cs')" />
+        <DirectPInvoke Include="libAvaloniaNative" />
+        <DirectPInvoke Include="libAvaloniaNative.dylib" />
+        <DirectPInvoke Include="AvaloniaNative" />
+        <NativeLibrary Include="$(_StaticLinkAvaloniaNativePackageRoot)/macos_font_preinit.o" />
+        <NativeLibrary Include="$(_StaticLinkAvaloniaNativePackageRoot)/libAvaloniaNative.a" />
+        <NativeSystemLibrary Include="c++" />
+        <LinkerArg Include="-framework AppKit" />
+        <LinkerArg Include="-framework Carbon" />
+        <LinkerArg Include="-framework CoreFoundation" />
+        <LinkerArg Include="-framework CoreGraphics" />
+        <LinkerArg Include="-framework Foundation" />
+        <LinkerArg Include="-framework OpenGL" />
+        <LinkerArg Include="-framework QuartzCore" />
+        <LinkerArg Include="-framework UniformTypeIdentifiers" />
+    </ItemGroup>
+
+    <Target Name="StaticLinkAvaloniaNativeAddMacOSDirectPInvokes"
+            BeforeTargets="WriteIlcRspFileForCompilation"
+            Condition="'$(PublishAot)' == 'true' and '$(_StaticLinkAvaloniaNativePackageRoot)' != ''">
+        <PropertyGroup>
+            <_StaticLinkAvaloniaNativeDirectPInvokeList>$(NativeIntermediateOutputPath)staticlink-avalonia-native.directpinvokes.txt</_StaticLinkAvaloniaNativeDirectPInvokeList>
+        </PropertyGroup>
+        <ItemGroup>
+            <_StaticLinkAvaloniaNativeDirectPInvoke Include="libAvaloniaNative" />
+            <_StaticLinkAvaloniaNativeDirectPInvoke Include="libAvaloniaNative.dylib" />
+            <_StaticLinkAvaloniaNativeDirectPInvoke Include="AvaloniaNative" />
+        </ItemGroup>
+        <MakeDir Directories="$(NativeIntermediateOutputPath)" />
+        <WriteLinesToFile File="$(_StaticLinkAvaloniaNativeDirectPInvokeList)" Lines="@(_StaticLinkAvaloniaNativeDirectPInvoke)" Overwrite="true" />
+        <ItemGroup>
+            <DirectPInvoke Include="libAvaloniaNative" />
+            <DirectPInvoke Include="libAvaloniaNative.dylib" />
+            <DirectPInvoke Include="AvaloniaNative" />
+            <DirectPInvokeList Include="$(_StaticLinkAvaloniaNativeDirectPInvokeList)" />
+        </ItemGroup>
+        <Error Condition="!Exists('$(_StaticLinkAvaloniaNativePackageRoot)/libAvaloniaNative.a')" Text="StaticLink.Avalonia.Native could not find $(_StaticLinkAvaloniaNativePackageRoot)/libAvaloniaNative.a. Check the package version and restore cache." />
+        <Error Condition="!Exists('$(_StaticLinkAvaloniaNativePackageRoot)/macos_font_preinit.o')" Text="StaticLink.Avalonia.Native could not find $(_StaticLinkAvaloniaNativePackageRoot)/macos_font_preinit.o. Check the package version and restore cache." />
+        <Message Importance="high" Text="StaticLink.Avalonia.Native Root: $(_StaticLinkAvaloniaNativePackageRoot)" />
+        <Message Importance="high" Text="StaticLink.Avalonia.Native DirectPInvoke: @(DirectPInvoke)" />
+        <Message Importance="high" Text="StaticLink.Avalonia.Native DirectPInvokeList: @(DirectPInvokeList)" />
+        <Message Importance="high" Text="StaticLink.Avalonia.Native NativeLibrary: @(NativeLibrary)" />
+    </Target>
+
+    <Target Name="StaticLinkAvaloniaNativeCleanDynamicAssets"
+            AfterTargets="Publish"
+            Condition="'$(PublishAot)' == 'true' and '$(_StaticLinkAvaloniaNativePackageRoot)' != ''">
+        <ItemGroup>
+            <_StaticLinkAvaloniaNativeFilesToDelete Include="$(PublishDir)libAvaloniaNative.dylib" />
+        </ItemGroup>
+        <Delete Files="@(_StaticLinkAvaloniaNativeFilesToDelete)" TreatErrorsAsWarnings="true" />
+    </Target>
+</Project>
