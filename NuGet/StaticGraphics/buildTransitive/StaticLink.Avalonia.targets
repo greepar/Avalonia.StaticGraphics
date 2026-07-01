@@ -31,7 +31,8 @@
         <LinkerArg Include="Gdi32.lib;User32.lib" />
         <LinkerArg Include="synchronization.lib" />
         <LinkerArg Include="fontsub.lib;Ole32.lib;USP10.lib" />
-        <LinkerArg Include="d3d12.lib;d3dcompiler.lib" />
+        <LinkerArg Include="d3dcompiler.lib" />
+        <LinkerArg Include="/SUBSYSTEM:WINDOWS,6.01" />
     </ItemGroup>
 
     <Target Name="StaticLinkAvaloniaAddWindowsDirectPInvokes"
@@ -74,7 +75,8 @@
             <LinkerArg Include="Gdi32.lib;User32.lib" />
             <LinkerArg Include="synchronization.lib" />
             <LinkerArg Include="fontsub.lib;Ole32.lib;USP10.lib" />
-            <LinkerArg Include="d3d12.lib;d3dcompiler.lib" />
+            <LinkerArg Include="d3dcompiler.lib" />
+            <LinkerArg Include="/SUBSYSTEM:WINDOWS,6.01" />
         </ItemGroup>
     </Target>
 

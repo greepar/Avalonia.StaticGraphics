@@ -416,7 +416,12 @@ skia_use_system_libwebp = false
 skia_use_system_zlib = false
 skia_use_vulkan = false
 skia_use_xps = true
-extra_cflags = [ "-DSKIA_C_DLL" ]
+extra_cflags = [
+  "-DSKIA_C_DLL",
+  "-DWINVER=0x0601",
+  "-D_WIN32_WINNT=0x0601",
+  "-DNTDDI_VERSION=0x06010000",
+]
 extra_cflags_cc = [ "/GR" ]
 "@ | Set-Content -Path (Join-Path $outDir "args.gn") -Encoding ASCII
 
@@ -539,6 +544,11 @@ build_angle_deqp_tests = false
 angle_enable_swiftshader = false
 angle_enable_vulkan = false
 angle_enable_wgpu = false
+extra_cflags = [
+  "-DWINVER=0x0601",
+  "-D_WIN32_WINNT=0x0601",
+  "-DNTDDI_VERSION=0x06010000",
+]
 "@ | Set-Content -Path (Join-Path $outDir "args.gn") -Encoding ASCII
         gn gen $outDir
         ninja -C $outDir -j $BuildJobs libANGLE_static libGLESv2_static
