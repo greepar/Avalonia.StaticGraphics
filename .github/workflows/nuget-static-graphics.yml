@@ -20,6 +20,7 @@ on:
 env:
   SKIASHARP_VERSION: "3.119.2"
   ANGLE_BRANCH: "7151"
+  DOTNET_ALPINE_IMAGE: mcr.microsoft.com/dotnet/sdk:10.0-alpine
 
 jobs:
   build-linux:
@@ -33,21 +34,58 @@ jobs:
           - rid: linux-arm64
             target_cpu: arm64
             runner: ubuntu-24.04-arm
+          - rid: linux-musl-x64
+            target_cpu: x64
+            runner: ubuntu-latest
+          - rid: linux-musl-arm64
+            target_cpu: arm64
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install native build dependencies
+        if: ${{ !startsWith(matrix.rid, 'linux-musl-') }}
         run: |
           sudo apt-get update
           sudo apt-get install -y clang lld llvm g++ ninja-build pkg-config libfontconfig1-dev libglib2.0-dev libgl1-mesa-dev libpci-dev libx11-dev libxcb1-dev libxext-dev
 
       - name: Build Linux static graphics libraries
+        if: ${{ !startsWith(matrix.rid, 'linux-musl-') }}
         env:
           RID: ${{ matrix.rid }}
           TARGET_CPU: ${{ matrix.target_cpu }}
           LLVM_AR: llvm-ar
         run: scripts/build-linux-static-graphics.sh all
+
+      - name: Build Linux musl static graphics libraries
+        if: ${{ startsWith(matrix.rid, 'linux-musl-') }}
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e RID="${{ matrix.rid }}" \
+            -e TARGET_CPU="${{ matrix.target_cpu }}" \
+            -e OUTPUT_DIR="/workspace/External/NativeStatic/${{ matrix.rid }}/native" \
+            -e SKIASHARP_VERSION="$SKIASHARP_VERSION" \
+            -e ANGLE_BRANCH="$ANGLE_BRANCH" \
+            -e LLVM_AR=llvm-ar \
+            -e DEPOT_TOOLS_BOOTSTRAP_PYTHON3=0 \
+            -e VPYTHON_BYPASS="manually managed python not supported by chrome operations" \
+            "$DOTNET_ALPINE_IMAGE" \
+            sh -lc '
+              set -e
+              apk add --no-cache bash ca-certificates git python3 py3-httplib2 py3-pysocks py3-six clang compiler-rt lld llvm g++ ninja pkgconf fontconfig-dev glib-dev mesa-dev libx11-dev libxcb-dev libxext-dev pciutils-dev linux-headers perl curl tar xz patch gcompat libc6-compat
+              python3 - <<'"'"'PY'"'"'
+          import pathlib
+          import httplib2
+
+          path = pathlib.Path(httplib2.__file__).with_name("socks.py")
+          if not path.exists():
+              path.write_text("from socks import *\n")
+          PY
+              bash scripts/build-linux-static-graphics.sh all
+            '
 
       - name: Upload Linux static archives
         uses: actions/upload-artifact@v4
@@ -127,7 +165,7 @@ jobs:
             runner: macos-14
           - rid: osx-arm64
             target_cpu: arm64
-            runner: macos-latest
+            runner: macos-15
     runs-on: ${{ matrix.runner }}
     env:
       RID: ${{ matrix.rid }}
@@ -139,6 +177,19 @@ jobs:
 
       - name: Install native build dependencies
         run: brew install ninja
+
+      - name: Install Xcode Metal toolchain
+        run: |
+          set -euo pipefail
+          cat > /tmp/staticlink-metal-check.metal <<'EOF'
+          #include <metal_stdlib>
+          using namespace metal;
+          kernel void staticlink_metal_check(device float* values [[buffer(0)]], uint id [[thread_position_in_grid]]) { values[id] = 0; }
+          EOF
+          if ! xcrun metal -c /tmp/staticlink-metal-check.metal -o /tmp/staticlink-metal-check.air >/dev/null 2>&1; then
+            sudo xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal -c /tmp/staticlink-metal-check.metal -o /tmp/staticlink-metal-check.air >/dev/null
 
       - name: Build macOS static graphics libraries
         run: bash ./scripts/build-macos-static-graphics.sh all
@@ -162,13 +213,13 @@ jobs:
             runner: macos-14
             avalonia_version: 11.3.14
           - rid: osx-arm64
-            runner: macos-latest
+            runner: macos-15
             avalonia_version: 11.3.14
           - rid: osx-x64
             runner: macos-14
             avalonia_version: 12.0.3
           - rid: osx-arm64
-            runner: macos-latest
+            runner: macos-15
             avalonia_version: 12.0.3
     runs-on: ${{ matrix.runner }}
     env:
@@ -234,7 +285,7 @@ jobs:
 
       - name: Move static archives into RID directories
         run: |
-          for rid in win-x64 win-x86 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+          for rid in win-x64 win-x86 win-arm64 linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
             mkdir -p "External/NativeStatic/$rid"
             mv "External/NativeStatic/native-static-$rid"/* "External/NativeStatic/$rid/"
             rmdir "External/NativeStatic/native-static-$rid"
@@ -246,7 +297,7 @@ jobs:
 
       - name: Verify static archives
         run: |
-          for rid in linux-x64 linux-arm64 osx-x64 osx-arm64; do
+          for rid in linux-x64 linux-arm64 linux-musl-x64 linux-musl-arm64 osx-x64 osx-arm64; do
             test -f External/NativeStatic/$rid/native/libskia.a
             test -f External/NativeStatic/$rid/native/libSkiaSharp.a
             test -f External/NativeStatic/$rid/native/libHarfBuzzSharp.a
@@ -261,6 +312,7 @@ jobs:
             test -f External/NativeStatic/$rid/native/libANGLE_static.lib
             test -f External/NativeStatic/$rid/native/libGLESv2_static.lib
           done
+          test -f External/NativeStatic/win-x86/native/skia_x86_stdcall_thunks.lib
 
       - name: Pack NuGet package
         run: |
@@ -321,12 +373,16 @@ jobs:
             runner: ubuntu-latest
           - rid: linux-arm64
             runner: ubuntu-24.04-arm
+          - rid: linux-musl-x64
+            runner: ubuntu-latest
+          - rid: linux-musl-arm64
+            runner: ubuntu-24.04-arm
           - rid: osx-x64
             runner: macos-14
             avalonia_version: 11.3.14
             native_version: 11.3.14.1
           - rid: osx-arm64
-            runner: macos-latest
+            runner: macos-15
             avalonia_version: 11.3.14
             native_version: 11.3.14.1
           - rid: osx-x64
@@ -334,7 +390,7 @@ jobs:
             avalonia_version: 12.0.3
             native_version: 12.0.3.1
           - rid: osx-arm64
-            runner: macos-latest
+            runner: macos-15
             avalonia_version: 12.0.3
             native_version: 12.0.3.1
     runs-on: ${{ matrix.runner }}
@@ -348,7 +404,7 @@ jobs:
           arch: ${{ matrix.msvc_arch }}
 
       - name: Install Linux publish dependencies
-        if: ${{ startsWith(matrix.rid, 'linux-') }}
+        if: ${{ startsWith(matrix.rid, 'linux-') && !startsWith(matrix.rid, 'linux-musl-') }}
         run: |
           sudo apt-get update
           sudo apt-get install -y clang lld zlib1g-dev libfontconfig1-dev
@@ -365,6 +421,7 @@ jobs:
           path: artifacts/nuget
 
       - name: Publish Avalonia single-file smoke app
+        if: ${{ !startsWith(matrix.rid, 'linux-musl-') }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -391,6 +448,23 @@ jobs:
             /p:StripSymbols=true `
             /p:PublishDir="$PWD/artifacts/smoke-${{ matrix.rid }}/"
 
+      - name: Publish Avalonia musl smoke app
+        if: ${{ startsWith(matrix.rid, 'linux-musl-') }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $package = Get-ChildItem -Path "artifacts/nuget" -Filter "StaticLink.Avalonia.*.nupkg" | Where-Object { $_.Name -notlike "StaticLink.Avalonia.Native.*" } | Select-Object -First 1
+          if (-not $package) { throw "StaticLink NuGet package was not downloaded." }
+          if ($package.BaseName -notmatch '^StaticLink\.Avalonia\.(.+)$') { throw "Unexpected package name: $($package.Name)" }
+          $version = $Matches[1]
+          $projectDir = Join-Path $PWD "artifacts/avalonia-smoke-src"
+          pwsh ./scripts/create-avalonia-smoke.ps1 -ProjectDir $projectDir -NuGetSource "/workspace/artifacts/nuget" -StaticLinkVersion $version -AvaloniaVersion "11.3.14"
+          docker run --rm `
+            -v "${{ github.workspace }}:/workspace" `
+            -w /workspace `
+            "${{ env.DOTNET_ALPINE_IMAGE }}" `
+            sh -c "apk add --no-cache clang lld build-base zlib-dev fontconfig-dev && dotnet publish /workspace/artifacts/avalonia-smoke-src/AvaloniaStaticLinkSmoke.csproj -c Release -r ${{ matrix.rid }} --configfile /workspace/artifacts/avalonia-smoke-src/NuGet.config /p:PublishAot=true /p:SelfContained=true /p:PublishSingleFile=true /p:StripSymbols=true /p:PublishDir=/workspace/artifacts/smoke-${{ matrix.rid }}/"
+
       - name: Verify no dynamic graphics libraries remain
         shell: pwsh
         run: |
@@ -403,6 +477,28 @@ jobs:
             exit 1
           }
           Get-ChildItem -Path $publishDir -Recurse -File | ForEach-Object { $_.FullName }
+
+      - name: Verify musl ELF dependencies
+        if: ${{ startsWith(matrix.rid, 'linux-musl-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            alpine:latest \
+            sh -c 'apk add --no-cache binutils pax-utils && app="artifacts/smoke-${{ matrix.rid }}/AvaloniaStaticLinkSmoke" && readelf -l "$app" | grep "Requesting program interpreter: /lib/ld-musl-" && scanelf -n "$app" && ! scanelf -n "$app" | grep -E "ld-linux|ld64.so"'
+
+      - name: Run Linux musl Avalonia smoke app
+        if: ${{ startsWith(matrix.rid, 'linux-musl-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace/artifacts/smoke-${{ matrix.rid }} \
+            alpine:latest \
+            sh -c 'apk add --no-cache xvfb-run libstdc++ libgcc fontconfig freetype ttf-dejavu libx11 libxcb libxext libxrender libxi libxrandr libxcursor libxfixes libxinerama libice libsm mesa-gl mesa-egl && fc-cache -f && fc-match sans && chmod +x ./AvaloniaStaticLinkSmoke && timeout 15s xvfb-run -a ./AvaloniaStaticLinkSmoke || code=$?; if [ "${code:-0}" = 124 ] || [ "${code:-0}" = 143 ]; then echo "Avalonia musl smoke app stayed alive for 15 seconds."; exit 0; fi; exit "${code:-0}"'
 
       - name: Run macOS Avalonia smoke app
         if: ${{ startsWith(matrix.rid, 'osx-') }}

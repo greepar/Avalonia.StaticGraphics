@@ -5,10 +5,12 @@
         <_StaticLinkAvaloniaRid Condition="'$(RuntimeIdentifier)' == 'win-arm64'">win-arm64</_StaticLinkAvaloniaRid>
         <_StaticLinkAvaloniaRid Condition="'$(RuntimeIdentifier)' == 'linux-x64'">linux-x64</_StaticLinkAvaloniaRid>
         <_StaticLinkAvaloniaRid Condition="'$(RuntimeIdentifier)' == 'linux-arm64'">linux-arm64</_StaticLinkAvaloniaRid>
+        <_StaticLinkAvaloniaRid Condition="'$(RuntimeIdentifier)' == 'linux-musl-x64'">linux-musl-x64</_StaticLinkAvaloniaRid>
+        <_StaticLinkAvaloniaRid Condition="'$(RuntimeIdentifier)' == 'linux-musl-arm64'">linux-musl-arm64</_StaticLinkAvaloniaRid>
         <_StaticLinkAvaloniaRid Condition="'$(RuntimeIdentifier)' == 'osx-x64'">osx-x64</_StaticLinkAvaloniaRid>
         <_StaticLinkAvaloniaRid Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">osx-arm64</_StaticLinkAvaloniaRid>
         <_StaticLinkAvaloniaNativeRoot Condition="'$(_StaticLinkAvaloniaRid)' != ''">$(StaticLinkAvaloniaRoot)$(_StaticLinkAvaloniaRid)/native</_StaticLinkAvaloniaNativeRoot>
-        <LinkerFlavor Condition="'$(LinkerFlavor)' == '' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64')">lld</LinkerFlavor>
+        <LinkerFlavor Condition="'$(LinkerFlavor)' == '' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64' or '$(RuntimeIdentifier)' == 'linux-musl-x64' or '$(RuntimeIdentifier)' == 'linux-musl-arm64')">lld</LinkerFlavor>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-x86' or '$(RuntimeIdentifier)' == 'win-arm64') and '$(_StaticLinkAvaloniaNativeRoot)' != ''">
@@ -17,6 +19,7 @@
         <DirectPInvoke Include="libGLESv2" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libGLESv2_static.lib')" />
         <DirectPInvoke Include="av_libglesv2" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libGLESv2_static.lib')" />
         <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.lib')" />
+        <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/skia_x86_stdcall_thunks.lib" Condition="'$(RuntimeIdentifier)' == 'win-x86' and Exists('$(_StaticLinkAvaloniaNativeRoot)/skia_x86_stdcall_thunks.lib')" />
         <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/skia.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/skia.lib')" />
         <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/SkiaSharp.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/SkiaSharp.lib')" />
         <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libANGLE_static.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libANGLE_static.lib')" />
@@ -31,7 +34,51 @@
         <LinkerArg Include="d3d12.lib;d3dcompiler.lib" />
     </ItemGroup>
 
-    <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64') and '$(_StaticLinkAvaloniaNativeRoot)' != ''">
+    <Target Name="StaticLinkAvaloniaAddWindowsDirectPInvokes"
+            BeforeTargets="WriteIlcRspFileForCompilation"
+            Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-x86' or '$(RuntimeIdentifier)' == 'win-arm64') and '$(_StaticLinkAvaloniaNativeRoot)' != ''">
+        <PropertyGroup>
+            <_StaticLinkAvaloniaDirectPInvokeList>$(NativeIntermediateOutputPath)staticlink-avalonia.directpinvokes.txt</_StaticLinkAvaloniaDirectPInvokeList>
+        </PropertyGroup>
+        <ItemGroup>
+            <_StaticLinkAvaloniaDirectPInvoke Include="libHarfBuzzSharp" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.lib')" />
+            <_StaticLinkAvaloniaDirectPInvoke Include="libHarfBuzzSharp.dll" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.lib')" />
+            <_StaticLinkAvaloniaDirectPInvoke Include="libSkiaSharp" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/SkiaSharp.lib')" />
+            <_StaticLinkAvaloniaDirectPInvoke Include="libSkiaSharp.dll" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/SkiaSharp.lib')" />
+            <_StaticLinkAvaloniaDirectPInvoke Include="libGLESv2" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libGLESv2_static.lib')" />
+            <_StaticLinkAvaloniaDirectPInvoke Include="libGLESv2.dll" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libGLESv2_static.lib')" />
+            <_StaticLinkAvaloniaDirectPInvoke Include="av_libglesv2" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libGLESv2_static.lib')" />
+            <_StaticLinkAvaloniaDirectPInvoke Include="av_libglesv2.dll" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libGLESv2_static.lib')" />
+        </ItemGroup>
+        <WriteLinesToFile File="$(_StaticLinkAvaloniaDirectPInvokeList)" Lines="@(_StaticLinkAvaloniaDirectPInvoke)" Overwrite="true" />
+        <ItemGroup>
+            <DirectPInvoke Include="@(_StaticLinkAvaloniaDirectPInvoke)" />
+            <DirectPInvokeList Include="$(_StaticLinkAvaloniaDirectPInvokeList)" />
+        </ItemGroup>
+    </Target>
+
+    <Target Name="StaticLinkAvaloniaAddWindowsNativeLibraries"
+            BeforeTargets="LinkNative"
+            Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-x86' or '$(RuntimeIdentifier)' == 'win-arm64') and '$(_StaticLinkAvaloniaNativeRoot)' != ''">
+        <ItemGroup>
+            <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.lib')" />
+            <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/skia_x86_stdcall_thunks.lib" Condition="'$(RuntimeIdentifier)' == 'win-x86' and Exists('$(_StaticLinkAvaloniaNativeRoot)/skia_x86_stdcall_thunks.lib')" />
+            <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/skia.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/skia.lib')" />
+            <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/SkiaSharp.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/SkiaSharp.lib')" />
+            <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libANGLE_static.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libANGLE_static.lib')" />
+            <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libGLESv2_static.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libGLESv2_static.lib')" />
+            <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libc++.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libc++.lib')" />
+            <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libc++abi.lib" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libc++abi.lib')" />
+            <LinkerArg Include="d3d9.lib;dxguid.lib" />
+            <LinkerArg Include="dxgi.lib" />
+            <LinkerArg Include="Gdi32.lib;User32.lib" />
+            <LinkerArg Include="synchronization.lib" />
+            <LinkerArg Include="fontsub.lib;Ole32.lib;USP10.lib" />
+            <LinkerArg Include="d3d12.lib;d3dcompiler.lib" />
+        </ItemGroup>
+    </Target>
+
+    <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64' or '$(RuntimeIdentifier)' == 'linux-musl-x64' or '$(RuntimeIdentifier)' == 'linux-musl-arm64') and '$(_StaticLinkAvaloniaNativeRoot)' != ''">
         <DirectPInvoke Include="libHarfBuzzSharp" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.a')" />
         <DirectPInvoke Include="libSkiaSharp" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libSkiaSharp.a')" />
         <NativeLibrary Include="$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.a" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libHarfBuzzSharp.a')" />
@@ -44,7 +91,7 @@
         <NativeSystemLibrary Include="fontconfig" />
     </ItemGroup>
 
-    <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64') and '$(_StaticLinkAvaloniaNativeRoot)' != '' and '$(LinkerFlavor)' == 'lld'">
+    <ItemGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64' or '$(RuntimeIdentifier)' == 'linux-musl-x64' or '$(RuntimeIdentifier)' == 'linux-musl-arm64') and '$(_StaticLinkAvaloniaNativeRoot)' != '' and '$(LinkerFlavor)' == 'lld'">
         <LinkerArg Include="-Wl,-z,nostart-stop-gc" />
         <LinkerArg Include="-Wl,--allow-multiple-definition" Condition="Exists('$(_StaticLinkAvaloniaNativeRoot)/libskia.a')" />
     </ItemGroup>

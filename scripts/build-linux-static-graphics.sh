@@ -37,6 +37,10 @@ require_cmd() {
   fi
 }
 
+is_musl_rid() {
+  [[ "$RID" == linux-musl-* ]]
+}
+
 ensure_tools() {
   require_cmd git
   require_cmd python3
@@ -50,12 +54,84 @@ ensure_tools() {
 
 ensure_depot_tools() {
   local depot_dir="$WORK_DIR/depot_tools"
+  local python_bin_dir
+  python_bin_dir="$(dirname "$(command -v python3)")"
   if [[ ! -d "$depot_dir/.git" ]]; then
     git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$depot_dir"
   else
     git -C "$depot_dir" pull --ff-only
   fi
-  export PATH="$depot_dir:$PATH"
+  if is_musl_rid; then
+    initialize_depot_tools_system_python "$depot_dir"
+    patch_depot_tools_python_deps "$depot_dir"
+  fi
+  export PATH="$python_bin_dir:$depot_dir:$PATH"
+}
+
+initialize_depot_tools_system_python() {
+  local depot_dir="$1"
+  local python_bin_dir
+  python_bin_dir="$(dirname "$(command -v python3)")"
+
+  if [[ -d "$depot_dir" ]]; then
+    python3 - "$depot_dir" "$python_bin_dir" <<'PY'
+import os
+import pathlib
+import sys
+
+depot_dir = pathlib.Path(sys.argv[1]).resolve()
+python_bin_dir = pathlib.Path(sys.argv[2]).resolve()
+marker = depot_dir / "python3_bin_reldir.txt"
+marker.write_text(os.path.relpath(python_bin_dir, depot_dir) + "\n")
+PY
+  fi
+}
+
+patch_depot_tools_python_deps() {
+  local depot_dir="$1"
+  local gsutil_dir="$depot_dir/external_bin/gsutil/gsutil_4.68/gsutil"
+  local gsutil_third_party="$gsutil_dir/third_party"
+
+  if [[ -d "$gsutil_dir" && ! -f "$gsutil_dir/six.py" ]]; then
+    python3 - "$gsutil_dir/six.py" <<'PY'
+import pathlib
+import shutil
+import six
+import sys
+
+src = pathlib.Path(six.__file__)
+dest = pathlib.Path(sys.argv[1])
+shutil.copyfile(src, dest)
+PY
+  fi
+
+  if [[ -d "$gsutil_third_party" && ! -f "$gsutil_third_party/six.py" ]]; then
+    python3 - "$gsutil_third_party/six.py" <<'PY'
+import pathlib
+import shutil
+import six
+import sys
+
+src = pathlib.Path(six.__file__)
+dest = pathlib.Path(sys.argv[1])
+shutil.copyfile(src, dest)
+PY
+  fi
+}
+
+prepend_python_module_path() {
+  local module="$1"
+  local module_dir
+  module_dir="$(python3 - "$module" <<'PY'
+import importlib
+import pathlib
+import sys
+
+module = importlib.import_module(sys.argv[1])
+print(pathlib.Path(module.__file__).parent)
+PY
+)"
+  export PYTHONPATH="$module_dir:${PYTHONPATH:-}"
 }
 
 sync_skiasharp() {
@@ -186,16 +262,28 @@ build_angle() {
   cd "$src"
   apply_angle_patches "$src"
   python3 scripts/bootstrap.py
+  if is_musl_rid; then
+    initialize_depot_tools_system_python "$src/third_party/depot_tools"
+    patch_depot_tools_python_deps "$src/third_party/depot_tools"
+    prepend_python_module_path six
+    prepare_angle_gcs_artifacts "$src"
+  fi
+  prepare_musl_clang_runtime
+  prepare_musl_libstdcxx_headers
   gclient sync -f -D -R
 
   local out_dir="$src/out/linux-static-$TARGET_CPU"
+  local angle_is_clang="false"
+  if is_musl_rid; then
+    angle_is_clang="true"
+  fi
   mkdir -p "$out_dir"
   cat >"$out_dir/args.gn" <<EOF_ARGS
 target_os = "linux"
 target_cpu = "$TARGET_CPU"
 is_debug = false
 is_component_build = false
-is_clang = false
+is_clang = $angle_is_clang
 treat_warnings_as_errors = false
 use_custom_libcxx = false
 use_sysroot = false
@@ -208,6 +296,7 @@ angle_enable_swiftshader = false
 angle_enable_vulkan = false
 angle_enable_wgpu = false
 EOF_ARGS
+  append_angle_musl_gn_args "$out_dir/args.gn"
 
   gn gen "$out_dir"
   ninja -C "$out_dir" -j "$BUILD_JOBS" libANGLE_static libGLESv2_static
@@ -260,6 +349,121 @@ PY
   elif [[ -f "$deps_patch" ]]; then
     git -C "$src" apply "$deps_patch"
   fi
+}
+
+prepare_angle_gcs_artifacts() {
+  local src="$1"
+  download_angle_gcs_artifact \
+    angle-glslang-validator \
+    "$src/tools/glslang/glslang_validator.sha1" \
+    "$src/tools/glslang/glslang_validator"
+  download_angle_gcs_artifact \
+    angle-flex-bison \
+    "$src/tools/flex-bison/linux/bison.sha1" \
+    "$src/tools/flex-bison/linux/bison"
+  download_angle_gcs_artifact \
+    angle-flex-bison \
+    "$src/tools/flex-bison/linux/flex.sha1" \
+    "$src/tools/flex-bison/linux/flex"
+}
+
+download_angle_gcs_artifact() {
+  local bucket="$1"
+  local sha_file="$2"
+  local output="$3"
+
+  if [[ -f "$sha_file" && ! -f "$output" ]]; then
+    local sha
+    sha="$(tr -d '[:space:]' <"$sha_file")"
+    curl -fsSL "https://storage.googleapis.com/$bucket/$sha" -o "$output"
+    chmod +x "$output"
+  fi
+}
+
+append_angle_musl_gn_args() {
+  local args_file="$1"
+
+  if is_musl_rid; then
+    cat >>"$args_file" <<'EOF_ARGS'
+clang_base_path = "/usr"
+clang_use_chrome_plugins = false
+EOF_ARGS
+  fi
+}
+
+prepare_musl_clang_runtime() {
+  if ! is_musl_rid; then
+    return 0
+  fi
+
+  local arch
+  local gnu_triple
+  case "$TARGET_CPU" in
+    x64)
+      arch="x86_64"
+      gnu_triple="x86_64-unknown-linux-gnu"
+      ;;
+    arm64)
+      arch="aarch64"
+      gnu_triple="aarch64-unknown-linux-gnu"
+      ;;
+    *)
+      echo "Unsupported musl ANGLE target_cpu for clang runtime: $TARGET_CPU" >&2
+      return 1
+      ;;
+  esac
+
+  local src
+  src="$(find /usr/lib/llvm* /usr/lib/clang -path "*/${arch}-alpine-linux-musl/libclang_rt.builtins-${arch}.a" -print -quit 2>/dev/null || true)"
+  if [[ -z "$src" ]]; then
+    echo "Could not find Alpine compiler-rt builtins for $arch" >&2
+    return 1
+  fi
+
+  local clang_version
+  clang_version="$(clang -print-resource-dir | awk -F/ '{print $NF}')"
+  local dest_dir="/usr/lib/clang/$clang_version/lib/$gnu_triple"
+  mkdir -p "$dest_dir"
+  ln -sf "$src" "$dest_dir/libclang_rt.builtins.a"
+}
+
+prepare_musl_libstdcxx_headers() {
+  if ! is_musl_rid; then
+    return 0
+  fi
+
+  local arch
+  local musl_triple
+  case "$TARGET_CPU" in
+    x64)
+      arch="x86_64"
+      musl_triple="x86_64-linux-musl"
+      ;;
+    arm64)
+      arch="aarch64"
+      musl_triple="aarch64-linux-musl"
+      ;;
+    *)
+      echo "Unsupported musl ANGLE target_cpu for libstdc++ headers: $TARGET_CPU" >&2
+      return 1
+      ;;
+  esac
+
+  local cxx_root
+  cxx_root="$(find /usr/include/c++ -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null || true)"
+  if [[ -z "$cxx_root" ]]; then
+    echo "Could not find libstdc++ include root" >&2
+    return 1
+  fi
+
+  local src_dir="$cxx_root/${arch}-alpine-linux-musl"
+  local dest_dir="$cxx_root/$musl_triple"
+  if [[ ! -d "$src_dir" ]]; then
+    echo "Could not find Alpine libstdc++ target headers: $src_dir" >&2
+    return 1
+  fi
+
+  ln -sfn "$src_dir" "$dest_dir"
 }
 
 copy_first_existing() {
