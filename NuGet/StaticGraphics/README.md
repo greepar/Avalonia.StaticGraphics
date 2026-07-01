@@ -11,7 +11,7 @@ dotnet add package StaticLink.Avalonia
 Or add it manually:
 
 ```xml
-<PackageReference Include="StaticLink.Avalonia" Version="3.119.2-7151.10" />
+<PackageReference Include="StaticLink.Avalonia" Version="2.88.9-7151.10" />
 ```
 
 For macOS, also reference `StaticLink.Avalonia.Native`. This package is macOS-only and must match your Avalonia version because it contains `libAvaloniaNative.a`.

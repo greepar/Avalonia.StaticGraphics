@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $PSScriptRoot
 $WorkDir = if ($env:WORK_DIR) { $env:WORK_DIR } else { Join-Path $RootDir "External\NativeStatic\.work" }
-$SkiaSharpVersion = if ($env:SKIASHARP_VERSION) { $env:SKIASHARP_VERSION } else { "3.119.2" }
+$SkiaSharpVersion = if ($env:SKIASHARP_VERSION) { $env:SKIASHARP_VERSION } else { "2.88.9" }
 $AngleBranch = if ($env:ANGLE_BRANCH) { $env:ANGLE_BRANCH } else { "7151" }
 $TargetCpu = if ($env:TARGET_CPU) { $env:TARGET_CPU } else { "x64" }
 $Rid = if ($env:RID) { $env:RID } else { "win-$TargetCpu" }
@@ -70,6 +70,15 @@ function Copy-FirstExisting($Destination, [string[]]$Candidates) {
         }
     }
     throw "None of the expected files exist for ${Destination}: $($Candidates -join ', ')"
+}
+
+function Resolve-FirstExistingPath([string[]]$Candidates) {
+    foreach ($candidate in $Candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+    throw "None of the expected paths exist: $($Candidates -join ', ')"
 }
 
 function Split-ParameterList($Parameters) {
@@ -443,7 +452,10 @@ extra_cflags_cc = [ "/GR" ]
     )
     New-WinX86SkiaStdcallThunks `
         -InputLibraries @($skiaLib, $skiaSharpLib, $harfbuzzLib) `
-        -BindingFiles @((Join-Path $src "binding\SkiaSharp\SkiaApi.generated.cs"), (Join-Path $src "binding\HarfBuzzSharp\HarfBuzzApi.generated.cs")) `
+        -BindingFiles @(
+            (Resolve-FirstExistingPath @((Join-Path $src "binding\SkiaSharp\SkiaApi.generated.cs"), (Join-Path $src "binding\Binding\SkiaApi.generated.cs"))),
+            (Resolve-FirstExistingPath @((Join-Path $src "binding\HarfBuzzSharp\HarfBuzzApi.generated.cs"), (Join-Path $src "binding\HarfBuzzSharp.Shared\HarfBuzzApi.generated.cs")))
+        ) `
         -Destination (Join-Path $OutputDir "skia_x86_stdcall_thunks.lib")
 }
 

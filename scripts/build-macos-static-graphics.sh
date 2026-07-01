@@ -6,7 +6,7 @@ WORK_DIR="${WORK_DIR:-$ROOT_DIR/External/NativeStatic/.work}"
 TARGET_CPU="${TARGET_CPU:-arm64}"
 RID="${RID:-osx-$TARGET_CPU}"
 OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/External/NativeStatic/$RID}"
-SKIASHARP_VERSION="${SKIASHARP_VERSION:-3.119.2}"
+SKIASHARP_VERSION="${SKIASHARP_VERSION:-2.88.9}"
 ANGLE_BRANCH="${ANGLE_BRANCH:-7151}"
 BUILD_JOBS="${BUILD_JOBS:-$(sysctl -n hw.ncpu)}"
 ANGLE_PATCH_DIR="${ANGLE_PATCH_DIR:-$ROOT_DIR/External/NativeStatic/patches}"
@@ -51,6 +51,101 @@ copy_first_existing() {
   echo "None of the expected files exist for $dest:" >&2
   printf '  %s\n' "$@" >&2
   return 1
+}
+
+resolve_skia_gn() {
+  local skia_dir="$1"
+  if [[ -x "$skia_dir/bin/gn" ]] && "$skia_dir/bin/gn" --version >/dev/null 2>&1; then
+    echo "$skia_dir/bin/gn"
+    return 0
+  fi
+  if command -v gn >/dev/null 2>&1; then
+    command -v gn
+    return 0
+  fi
+  echo "Missing runnable gn. Install Homebrew gn or provide a runnable $skia_dir/bin/gn." >&2
+  return 1
+}
+
+patch_skia_2889_compat() {
+  local skia_dir="$1"
+  local parse_color="$skia_dir/src/utils/SkParseColor.cpp"
+  if [[ -f "$parse_color" ]] && ! grep -q '#include <iterator>' "$parse_color"; then
+    python3 - "$parse_color" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+if '#include <iterator>' not in text:
+    marker = '#include <algorithm>\n'
+    if marker in text:
+        text = text.replace(marker, marker + '#include <iterator>\n', 1)
+    else:
+        text = '#include <iterator>\n' + text
+    path.write_text(text)
+PY
+  fi
+
+  local zutil="$skia_dir/third_party/externals/zlib/zutil.h"
+  if [[ -f "$zutil" ]] && grep -q 'define fdopen(fd,mode) NULL' "$zutil"; then
+    python3 - "$zutil" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+text = text.replace('#        define fdopen(fd,mode) NULL /* No fdopen() */\n', '')
+path.write_text(text)
+PY
+  fi
+
+  local pngpriv="$skia_dir/third_party/externals/libpng/pngpriv.h"
+  if [[ -f "$pngpriv" ]] && grep -q '#      include <fp.h>' "$pngpriv"; then
+    python3 - "$pngpriv" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+text = text.replace('#      include <fp.h>\n', '')
+path.write_text(text)
+PY
+  fi
+  if [[ -f "$pngpriv" ]] && ! grep -q '#include <math.h>' "$pngpriv"; then
+    python3 - "$pngpriv" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+marker = '#include "png.h"\n'
+if '#include <math.h>' not in text:
+    if marker in text:
+        text = text.replace(marker, marker + '#include <math.h>\n', 1)
+    else:
+        text = '#include <math.h>\n' + text
+    path.write_text(text)
+PY
+  fi
+
+  local pngc="$skia_dir/third_party/externals/libpng/png.c"
+  if [[ -f "$pngc" ]] && ! grep -q '#include <math.h>' "$pngc"; then
+    python3 - "$pngc" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+marker = '#include "pngpriv.h"\n'
+if '#include <math.h>' not in text:
+    if marker in text:
+        text = text.replace(marker, marker + '#include <math.h>\n', 1)
+    else:
+        text = '#include <math.h>\n' + text
+    path.write_text(text)
+PY
+  fi
 }
 
 sync_skiasharp() {
@@ -106,8 +201,15 @@ build_skia() {
   if [[ ! -x "$skia_dir/bin/gn" ]]; then
     sync_skia_deps "$skia_dir"
   fi
+  patch_skia_2889_compat "$skia_dir"
 
   local out_dir="$skia_dir/out/mac-static-$TARGET_CPU"
+  local mac_arch
+  case "$TARGET_CPU" in
+    x64) mac_arch="x86_64" ;;
+    arm64) mac_arch="arm64" ;;
+    *) echo "Unsupported macOS TARGET_CPU: $TARGET_CPU" >&2; exit 1 ;;
+  esac
   mkdir -p "$out_dir" "$OUTPUT_DIR"
   cat >"$out_dir/args.gn" <<EOF_ARGS
 target_os = "mac"
@@ -135,11 +237,14 @@ skia_use_xps = false
 cc = "clang"
 cxx = "clang++"
 ar = "ar"
-extra_cflags = [ "-DSKIA_C_DLL" ]
+extra_cflags = [ "-DSKIA_C_DLL", "-arch", "$mac_arch" ]
 extra_cflags_cc = [ "-frtti" ]
+extra_ldflags = [ "-arch", "$mac_arch" ]
 EOF_ARGS
 
-  (cd "$skia_dir" && "$skia_dir/bin/gn" gen "$out_dir")
+  local gn_cmd
+  gn_cmd="$(resolve_skia_gn "$skia_dir")"
+  (cd "$skia_dir" && "$gn_cmd" gen "$out_dir")
   ninja -C "$out_dir" -j "$BUILD_JOBS" skia SkiaSharp HarfBuzzSharp
   copy_first_existing "$OUTPUT_DIR/libskia.a" "$out_dir/libskia.a" "$out_dir/obj/libskia.a"
   copy_first_existing "$OUTPUT_DIR/libSkiaSharp.a" "$out_dir/libSkiaSharp.a" "$out_dir/obj/libSkiaSharp.a"

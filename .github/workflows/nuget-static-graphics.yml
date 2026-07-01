@@ -18,7 +18,7 @@ on:
       - "staticlink-avalonia-v*"
 
 env:
-  SKIASHARP_VERSION: "3.119.2"
+  SKIASHARP_VERSION: "2.88.9"
   ANGLE_BRANCH: "7151"
   DOTNET_ALPINE_IMAGE: mcr.microsoft.com/dotnet/sdk:10.0-alpine
 
@@ -49,6 +49,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang lld llvm g++ ninja-build pkg-config libfontconfig1-dev libglib2.0-dev libgl1-mesa-dev libpci-dev libx11-dev libxcb1-dev libxext-dev
+          if [ "${{ matrix.target_cpu }}" = "arm64" ]; then
+            sudo apt-get install -y generate-ninja
+          fi
 
       - name: Build Linux static graphics libraries
         if: ${{ !startsWith(matrix.rid, 'linux-musl-') }}
@@ -75,7 +78,7 @@ jobs:
             "$DOTNET_ALPINE_IMAGE" \
             sh -lc '
               set -e
-              apk add --no-cache bash ca-certificates git python3 py3-httplib2 py3-pysocks py3-six clang compiler-rt lld llvm g++ ninja pkgconf fontconfig-dev glib-dev mesa-dev libx11-dev libxcb-dev libxext-dev pciutils-dev linux-headers perl curl tar xz patch gcompat libc6-compat
+              apk add --no-cache bash ca-certificates git python3 py3-httplib2 py3-pysocks py3-six clang compiler-rt lld llvm g++ gn ninja pkgconf fontconfig-dev glib-dev mesa-dev libx11-dev libxcb-dev libxext-dev pciutils-dev linux-headers perl curl tar xz patch gcompat libc6-compat
               python3 - <<'"'"'PY'"'"'
           import pathlib
           import httplib2
@@ -215,12 +218,6 @@ jobs:
           - rid: osx-arm64
             runner: macos-15
             avalonia_version: 11.3.14
-          - rid: osx-x64
-            runner: macos-14
-            avalonia_version: 12.0.3
-          - rid: osx-arm64
-            runner: macos-15
-            avalonia_version: 12.0.3
     runs-on: ${{ matrix.runner }}
     env:
       RID: ${{ matrix.rid }}
@@ -317,7 +314,7 @@ jobs:
       - name: Pack NuGet package
         run: |
           dotnet pack NuGet/StaticGraphics/StaticLink.Avalonia.csproj -c Release -o artifacts/nuget
-          for version in 11.3.14 12.0.3; do
+          for version in 11.3.14; do
             mkdir -p External/NativeStatic/osx-x64/native External/NativeStatic/osx-arm64/native
             cp External/AvaloniaNative/native-avalonia-$version-osx-x64/* External/NativeStatic/osx-x64/native/
             cp External/AvaloniaNative/native-avalonia-$version-osx-arm64/* External/NativeStatic/osx-arm64/native/
@@ -385,14 +382,6 @@ jobs:
             runner: macos-15
             avalonia_version: 11.3.14
             native_version: 11.3.14.1
-          - rid: osx-x64
-            runner: macos-14
-            avalonia_version: 12.0.3
-            native_version: 12.0.3.1
-          - rid: osx-arm64
-            runner: macos-15
-            avalonia_version: 12.0.3
-            native_version: 12.0.3.1
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

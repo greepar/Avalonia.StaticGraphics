@@ -6,7 +6,7 @@ WORK_DIR="${WORK_DIR:-$ROOT_DIR/External/NativeStatic/.work}"
 TARGET_CPU="${TARGET_CPU:-x64}"
 RID="${RID:-linux-$TARGET_CPU}"
 OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/External/NativeStatic/$RID}"
-SKIASHARP_VERSION="${SKIASHARP_VERSION:-3.119.2}"
+SKIASHARP_VERSION="${SKIASHARP_VERSION:-2.88.9}"
 ANGLE_BRANCH="${ANGLE_BRANCH:-7151}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 ANGLE_PATCH_DIR="${ANGLE_PATCH_DIR:-$ROOT_DIR/External/NativeStatic/patches}"
@@ -20,7 +20,7 @@ Usage: scripts/build-linux-static-graphics.sh [skia|angle|all]
 Environment:
   WORK_DIR            Source/build cache directory. Default: External/NativeStatic/.work
   OUTPUT_DIR          Final static library directory. Default: External/NativeStatic/linux-$TARGET_CPU
-  SKIASHARP_VERSION   SkiaSharp release branch version. Default: 3.119.2
+  SKIASHARP_VERSION   SkiaSharp release branch version. Default: 2.88.9
   ANGLE_BRANCH        ANGLE chromium branch. Default: 7151
   TARGET_CPU          GN target_cpu. Default: x64. Supported: x64, arm64
   RID                 Output RID. Default: linux-$TARGET_CPU
@@ -61,8 +61,10 @@ ensure_depot_tools() {
   else
     git -C "$depot_dir" pull --ff-only
   fi
-  if is_musl_rid; then
+  if is_musl_rid || [[ "$TARGET_CPU" == "arm64" ]]; then
     initialize_depot_tools_system_python "$depot_dir"
+  fi
+  if is_musl_rid; then
     patch_depot_tools_python_deps "$depot_dir"
   fi
   export PATH="$python_bin_dir:$depot_dir:$PATH"
@@ -180,6 +182,45 @@ sync_skia_deps() {
   fi
 }
 
+resolve_skia_gn() {
+  local skia_dir="$1"
+  if [[ -x "$skia_dir/bin/gn" ]] && "$skia_dir/bin/gn" --version >/dev/null 2>&1; then
+    echo "$skia_dir/bin/gn"
+    return 0
+  fi
+  if [[ -x /usr/bin/gn ]] && /usr/bin/gn --version >/dev/null 2>&1; then
+    echo /usr/bin/gn
+    return 0
+  fi
+  if command -v gn >/dev/null 2>&1; then
+    command -v gn
+    return 0
+  fi
+  echo "Missing runnable gn. Install generate-ninja/gn or provide a runnable $skia_dir/bin/gn." >&2
+  return 1
+}
+
+patch_skia_2889_compat() {
+  local skia_dir="$1"
+  local parse_color="$skia_dir/src/utils/SkParseColor.cpp"
+  if [[ -f "$parse_color" ]] && ! grep -q '#include <iterator>' "$parse_color"; then
+    python3 - "$parse_color" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+if '#include <iterator>' not in text:
+    marker = '#include <algorithm>\n'
+    if marker in text:
+        text = text.replace(marker, marker + '#include <iterator>\n', 1)
+    else:
+        text = '#include <iterator>\n' + text
+    path.write_text(text)
+PY
+  fi
+}
+
 build_skia() {
   ensure_tools
   ensure_depot_tools
@@ -188,6 +229,7 @@ build_skia() {
   sync_skia_deps "$src"
 
   local skia_dir="$src/externals/skia"
+  patch_skia_2889_compat "$skia_dir"
   local out_dir="$skia_dir/out/linux-static-$TARGET_CPU"
   mkdir -p "$out_dir" "$OUTPUT_DIR"
 
@@ -227,7 +269,9 @@ extra_cflags_cc = [ "-frtti" ]
 extra_ldflags = [ "-static-libstdc++", "-static-libgcc" ]
 EOF_ARGS
 
-  (cd "$skia_dir" && "$skia_dir/bin/gn" gen "$out_dir")
+  local gn_cmd
+  gn_cmd="$(resolve_skia_gn "$skia_dir")"
+  (cd "$skia_dir" && "$gn_cmd" gen "$out_dir")
   ninja -C "$out_dir" -j "$BUILD_JOBS" skia SkiaSharp HarfBuzzSharp
 
   copy_first_existing "$OUTPUT_DIR/libskia.a" \
@@ -268,9 +312,18 @@ build_angle() {
     prepend_python_module_path six
     prepare_angle_gcs_artifacts "$src"
   fi
+  if use_angle_nohooks_sync; then
+    prepare_angle_gcs_artifacts "$src"
+  fi
   prepare_musl_clang_runtime
   prepare_musl_libstdcxx_headers
-  gclient sync -f -D -R
+  if use_angle_nohooks_sync; then
+    gclient sync -f -D -R --nohooks
+    patch_angle_system_gn_compat "$src"
+    python3 build/util/lastchange.py -o build/util/LASTCHANGE
+  else
+    gclient sync -f -D -R
+  fi
 
   local out_dir="$src/out/linux-static-$TARGET_CPU"
   local angle_is_clang="false"
@@ -315,6 +368,24 @@ apply_angle_patches() {
   local src="$1"
   local build_patch="$ANGLE_PATCH_DIR/angle-chromium-$ANGLE_BRANCH.patch"
   local deps_patch="$ANGLE_PATCH_DIR/angle-chromium-$ANGLE_BRANCH-deps.patch"
+
+  if ! grep -q 'not_needed(\["exec_script_allowlist"\])' "$src/.gn"; then
+    python3 - "$src/.gn" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+needle = 'exec_script_allowlist = angle_dotfile_settings.exec_script_allowlist +\n'
+if needle in text and 'not_needed(["exec_script_allowlist"])' not in text:
+    end = text.find('\n\n', text.find(needle))
+    if end != -1:
+        text = text[:end] + '\nnot_needed(["exec_script_allowlist"])' + text[end:]
+    else:
+        text += '\nnot_needed(["exec_script_allowlist"])\n'
+    path.write_text(text)
+PY
+  fi
 
   if ! git -C "$src" grep -q 'angle_static_library("libANGLE_static")' -- BUILD.gn; then
     python3 - "$src/BUILD.gn" <<'PY'
@@ -377,6 +448,27 @@ download_angle_gcs_artifact() {
     sha="$(tr -d '[:space:]' <"$sha_file")"
     curl -fsSL "https://storage.googleapis.com/$bucket/$sha" -o "$output"
     chmod +x "$output"
+  fi
+}
+
+use_angle_nohooks_sync() {
+  ! is_musl_rid && [[ "$TARGET_CPU" == "arm64" ]]
+}
+
+patch_angle_system_gn_compat() {
+  local src="$1"
+  local siso_gni="$src/build/toolchain/siso.gni"
+  if [[ -f "$siso_gni" ]] && grep -q 'path_exists(' "$siso_gni"; then
+    python3 - "$siso_gni" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+text = re.sub(r'(?<!false && )path_exists\(', 'false && path_exists(', text)
+path.write_text(text)
+PY
   fi
 }
 
