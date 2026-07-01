@@ -11,8 +11,16 @@ dotnet add package StaticLink.Avalonia
 Or add it manually:
 
 ```xml
-<PackageReference Include="StaticLink.Avalonia" Version="3.119.2-7151.10" />
+<PackageReference Include="StaticLink.Avalonia" Version="3.119.2-7151.11" />
 ```
+
+`3.119.2-7151.11` supports Avalonia 11. If you need the SkiaSharp 2 line for an Avalonia 11 project, use this optional package variant:
+
+```xml
+<PackageReference Include="StaticLink.Avalonia" Version="2.88.9-7151.10" />
+```
+
+`2.88.9-7151.10` is only for Avalonia 11 projects that specifically want SkiaSharp 2.
 
 For macOS, also reference `StaticLink.Avalonia.Native`. This package is macOS-only and must match your Avalonia version because it contains `libAvaloniaNative.a`.
 
